@@ -32,7 +32,7 @@ jobs:
           VERSION=${{ steps.version.outputs.VERSION }}
           mkdir -p build/$VERSION
           npx browserify web/main.js -t brfs | npx terser -c -m -o build/$VERSION/static/bundle.min.js
-          cp -r docs/ build/$VERSION
+          cp -r docs/* build/$VERSION
 
           # Create root index.html that redirects to the current version
           echo "<!DOCTYPE html><html><head><meta http-equiv='refresh' content='0; url=${VERSION}/'></head><body>Redirecting to latest version...</body></html>" > build/index.html
