@@ -3,7 +3,7 @@ name: Versioned GitHub Pages Deployment
 on:
   push:
     branches:
-      - main
+      - master
 
 jobs:
   deploy:
@@ -31,7 +31,7 @@ jobs:
           mkdir -p build/$VERSION
           browserify web/main.js -t brfs | terser -c -m -o build/$VERSION/static/bundle.min.js
           cp -r docs build/$VERSION
-          
+
           # Create root index.html that redirects to the current version
           echo "<!DOCTYPE html><html><head><meta http-equiv='refresh' content='0; url=${VERSION}/'></head><body>Redirecting to latest version...</body></html>" > build/index.html
 
