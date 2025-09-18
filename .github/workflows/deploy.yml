@@ -1,0 +1,43 @@
+name: Versioned GitHub Pages Deployment
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Get version from package.json
+        id: version
+        run: echo "VERSION=$(node -p \"require('./package.json').version\")" >> $GITHUB_OUTPUT
+
+      - name: Build for production
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          mkdir -p build/$VERSION
+          browserify web/main.js -t brfs | terser -c -m -o build/$VERSION/static/bundle.min.js
+          cp -r docs build/$VERSION
+          
+          # Create root index.html that redirects to the current version
+          echo "<!DOCTYPE html><html><head><meta http-equiv='refresh' content='0; url=${VERSION}/'></head><body>Redirecting to latest version...</body></html>" > build/index.html
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./build
+          keep_files: true
