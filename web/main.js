@@ -5,7 +5,6 @@ var Game = require('./script/engine/game.js');
 var Renderer = require('./script/engine/renderer.js');
 var Canvas = require('./script/engine/canvas.js');
 var UI = require('./script/ui/ui.js');
-var bs = require('browser-storage');
 var packageInfo = require('./../package.json');
 var socketConfig = require('./../socket-config.json');
 
@@ -139,7 +138,7 @@ function initWebsocket() {
         } else if(data.type === 'server-join') { // Initial server status
             var requestServer = data.data.request.server;
             var requestPass = data.data.request.password;
-            bs.setItem('dzone-default-server', JSON.stringify({ id: requestServer, password: requestPass }));
+            localStorage.setItem('dzone-default-server', JSON.stringify({ id: requestServer, password: requestPass }));
             game.reset();
             game.renderer.clear();
             var userList = data.data.users;
@@ -208,7 +207,7 @@ function getStartupServer() {
     // Get startup server, first checking URL params, then localstorage
     var startupServer = { id: util.getURLParameter('s') }; // Check URL params
     if(!startupServer.id) {
-        startupServer = bs.getItem('dzone-default-server'); // Check localstorage
+        startupServer = localStorage.getItem('dzone-default-server'); // Check localstorage
         if(startupServer) startupServer = JSON.parse(startupServer);
     }
     if(!startupServer/* || !game.servers[startupServer.id]*/) startupServer = { id: 'default' };
