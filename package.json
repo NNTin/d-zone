@@ -4,20 +4,23 @@
   "description": "An ambient life simulation driven by the user activity within a Discord server",
   "main": "index.js",
   "dependencies": {
-    "brfs": "^2.0.1",
-    "browserify": "^17.0.0",
     "express": "^5.1.0",
     "inherits": "^2.0.4",
-    "localStorage": "^1.0.4",
     "raf": "^3.1.0",
-    "watchify": "^4.0.0",
     "ws": "^8.13.0"
+  },
+  "devDependencies": {
+    "brfs": "^2.0.1",
+    "browserify": "^17.0.0",
+    "terser": "^5.44.0",
+    "watchify": "^4.0.0"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build:dev": "browserify web/main.js -t brfs -o web/static/bundle.js && terser web/static/bundle.js -o web/static/bundle.min.js",
     "build:prod": "browserify web/main.js -t brfs | terser -c -m -o web/static/bundle.min.js",
     "watch": "watchify web/main.js -t brfs -d -o web/static/bundle.js -v",
+    "prestart": "npm run build:dev",
     "start": "node index.js"
   },
   "repository": {
@@ -38,8 +41,5 @@
   "bugs": {
     "url": "https://github.com/NNTin/d-zone/issues"
   },
-  "homepage": "https://nntin.github.io/d-zone",
-  "devDependencies": {
-    "terser": "^5.44.0"
-  }
+  "homepage": "https://nntin.github.io/d-zone"
 }
