@@ -46,13 +46,9 @@ org.eclipse.*
 *.exe
 
 # Custom
-bot.json
 reference/*
-web/static/bundle.js
-web/index-down.html
-tenc
-restart bot.bat
-start bot.bat
+docs/static/bundle.js
+docs/static/bundle.min.js
 
 # Config
 .env
@@ -89,4 +85,3 @@ build/Release
 # https://www.npmjs.org/doc/misc/npm-faq.html#should-i-check-my-node_modules-folder-into-git
 node_modules
 
-/web/static/bundle.min.js

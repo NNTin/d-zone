@@ -5,7 +5,7 @@ const app = express();
 const PORT = 8080;
 
 // Serve static files from the 'web' directory
-app.use(express.static(path.join(__dirname, 'web')));
+app.use(express.static(path.join(__dirname, 'docs')));
 
 app.listen(PORT, () => {
     console.log(`Static site served at http://localhost:${PORT}`);
