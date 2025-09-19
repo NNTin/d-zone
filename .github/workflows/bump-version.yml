@@ -72,7 +72,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               workflow_id: 'deploy.yml',
-              ref: 'main',
+              ref: 'master',
               inputs: {
                 version: `${version}`
               }
