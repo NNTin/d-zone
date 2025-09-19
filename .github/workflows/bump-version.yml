@@ -65,7 +65,7 @@ jobs:
       - name: Trigger deploy workflow
         uses: actions/github-script@v6
         with:
-          github-token: ${{ secrets.PAT_TOKEN }}   # or GITHUB_TOKEN if allowed
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const version = '${{ steps.version.outputs.VERSION }}';
             await github.rest.actions.createWorkflowDispatch({
