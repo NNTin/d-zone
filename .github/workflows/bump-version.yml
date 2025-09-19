@@ -54,3 +54,26 @@ jobs:
           VERSION=$(node -p "require('./package.json').version")
           git tag "v$VERSION"
           git push https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }} "v$VERSION"
+      
+      - name: Read version from package.json
+        id: version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      # triggers deploy.yml, has to be solved via workflow_dispatch because on tag push is not supported in forked repos
+      - name: Trigger deploy workflow
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.PAT_TOKEN }}   # or GITHUB_TOKEN if allowed
+          script: |
+            const version = '${{ steps.version.outputs.VERSION }}';
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'deploy.yml',
+              ref: 'main',
+              inputs: {
+                version: `${version}`
+              }
+            })

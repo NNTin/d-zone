@@ -1,9 +1,11 @@
 name: Versioned GitHub Pages Deployment
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy'
+        required: true
 
 jobs:
   deploy:
@@ -21,15 +23,9 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Get version from package.json
-        id: version
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-
       - name: Build for production
         run: |
-          VERSION=${{ steps.version.outputs.VERSION }}
+          VERSION=${{ github.event.inputs.version }}
           mkdir -p build/$VERSION
           npx browserify src/main.js -t brfs | npx terser -c -m -o build/$VERSION/static/bundle.min.js
           cp -r dist/* build/$VERSION
