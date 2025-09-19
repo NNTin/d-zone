@@ -27,7 +27,7 @@ jobs:
           BRANCH=${{ github.ref_name }}
           mkdir -p build/$BRANCH
           npx browserify web/main.js -t brfs | npx terser -c -m -o build/$BRANCH/static/bundle.min.js
-          cp -r docs/* build/$BRANCH
+          cp -r dist/* build/$BRANCH
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4

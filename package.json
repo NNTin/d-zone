@@ -17,9 +17,9 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build:dev": "browserify web/main.js -t brfs -o docs/static/bundle.js && terser docs/static/bundle.js -o docs/static/bundle.min.js",
-    "build:prod": "browserify web/main.js -t brfs | terser -c -m -o docs/static/bundle.min.js",
-    "watch": "watchify web/main.js -t brfs -d -o docs/static/bundle.js -v",
+    "build:dev": "browserify web/main.js -t brfs -o dist/static/bundle.js && terser dist/static/bundle.js -o dist/static/bundle.min.js",
+    "build:prod": "browserify web/main.js -t brfs | terser -c -m -o dist/static/bundle.min.js",
+    "watch": "watchify web/main.js -t brfs -d -o dist/static/bundle.js -v",
     "prestart": "npm run build:dev",
     "start": "node index.js"
   },

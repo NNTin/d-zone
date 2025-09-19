@@ -47,8 +47,8 @@ org.eclipse.*
 
 # Custom
 reference/*
-docs/static/bundle.js
-docs/static/bundle.min.js
+dist/static/bundle.js
+dist/static/bundle.min.js
 
 # Config
 .env
