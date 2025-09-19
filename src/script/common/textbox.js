@@ -2,17 +2,15 @@
 var inherits = require('inherits');
 var Entity = require('./../engine/entity.js');
 var TextBlotter = require('./../common/textblotter.js');
-var miscConfig = JSON.parse(require('fs').readFileSync('./misc-config.json')) || {};
 
-var textboxConfig = miscConfig.textbox || {};
-var TEXTBOX_MAX_WIDTH = textboxConfig.maxWidth || 96;
-var TEXTBOX_LINES_PER_PAGE = textboxConfig.linesPerPage || 4;
-var TEXTBOX_SCROLL_SPEEDS = textboxConfig.scrollSpeeds || [ [0, 3], [75, 2], [150, 1] ];
-var TEXTBOX_PAGE_DELAY = textboxConfig.pageDelay || 5;
-var TEXTBOX_FINAL_DELAY = textboxConfig.finalDelay || 60;
-var TEXTBOX_OPEN_TIME = textboxConfig.openTime || 10;
-var TEXTBOX_CLOSE_TIME = textboxConfig.closeTime || 8;
-var TEXTBOX_BG_COLOR = textboxConfig.bgColor || 'rgba(0, 0, 0, 0.7)';
+var TEXTBOX_MAX_WIDTH = 96;
+var TEXTBOX_LINES_PER_PAGE = 4;
+var TEXTBOX_SCROLL_SPEEDS = [ [0, 3], [75, 2], [150, 1] ];
+var TEXTBOX_PAGE_DELAY = 5;
+var TEXTBOX_FINAL_DELAY = 60;
+var TEXTBOX_OPEN_TIME = 10;
+var TEXTBOX_CLOSE_TIME = 8;
+var TEXTBOX_BG_COLOR = 'rgba(0, 0, 0, 0.7)';
 
 module.exports = TextBox;
 inherits(TextBox, Entity);

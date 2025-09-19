@@ -2,8 +2,8 @@ name: Versioned GitHub Pages Deployment
 
 on:
   push:
-    branches:
-      - master
+    tags:
+      - 'v*'  # Only run on version tags like v1.0.0, v2.3.1, etc.
 
 jobs:
   deploy:
@@ -31,8 +31,8 @@ jobs:
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
           mkdir -p build/$VERSION
-          npx browserify web/main.js -t brfs | npx terser -c -m -o build/$VERSION/static/bundle.min.js
-          cp -r docs/* build/$VERSION
+          npx browserify src/main.js -t brfs | npx terser -c -m -o build/$VERSION/static/bundle.min.js
+          cp -r dist/* build/$VERSION
 
           # Create root index.html that redirects to the current version
           echo "<!DOCTYPE html><html><head><meta http-equiv='refresh' content='0; url=${VERSION}/'></head><body>Redirecting to latest version...</body></html>" > build/index.html
