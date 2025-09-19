@@ -3,7 +3,7 @@ name: Versioned GitHub Pages Deployment
 on:
   push:
     tags:
-      - 'v*'  # Only run on version tags like v1.0.0, v2.3.1, etc.
+      - 'v*'
 
 jobs:
   deploy:
