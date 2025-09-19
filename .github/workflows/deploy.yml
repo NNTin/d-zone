@@ -31,7 +31,7 @@ jobs:
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
           mkdir -p build/$VERSION
-          npx browserify web/main.js -t brfs | npx terser -c -m -o build/$VERSION/static/bundle.min.js
+          npx browserify src/main.js -t brfs | npx terser -c -m -o build/$VERSION/static/bundle.min.js
           cp -r dist/* build/$VERSION
 
           # Create root index.html that redirects to the current version
