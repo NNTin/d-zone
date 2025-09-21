@@ -43,6 +43,13 @@ function initWebsocket() {
     }
     console.log('Initializing websocket on', socketURL);
 
+    // Function to clean up event listeners and prevent memory leaks
+    function cleanupEventListeners() {
+        if(users && users.removeAllListeners) users.removeAllListeners();
+        if(world && world.removeAllListeners) world.removeAllListeners();
+        if(decorator && decorator.removeAllListeners) decorator.removeAllListeners();
+    }
+
     // Swap the comments on the next 3 lines to switch between your websocket server and a virtual one
     ws = new WebSocket(socketURL);
     //var TestSocket = require('./script/engine/tester.js'),
@@ -143,6 +150,10 @@ function initWebsocket() {
             var requestServer = data.data.request.server;
             var requestPass = data.data.request.password;
             localStorage.setItem('dzone-default-server', JSON.stringify({ id: requestServer, password: requestPass }));
+            
+            // Clean up existing event listeners to prevent memory leaks
+            cleanupEventListeners();
+            
             game.reset();
             game.renderer.clear();
             var userList = data.data.users;
@@ -158,8 +169,12 @@ function initWebsocket() {
             );
             //return;
             //console.log('Initializing actors',data.data);
-            game.setMaxListeners(Object.keys(userList).length + 50);
-            users.setMaxListeners(Object.keys(userList).length);
+            var userCount = Object.keys(userList).length;
+            game.setMaxListeners(userCount + 100);
+            users.setMaxListeners(userCount + 50);
+            // Set max listeners for world and decorator to prevent memory leaks
+            if(world && world.setMaxListeners) world.setMaxListeners(userCount + 50);
+            if(decorator && decorator.setMaxListeners) decorator.setMaxListeners(userCount + 50);
             for(var uid in userList) { if(!userList.hasOwnProperty(uid)) continue;
                 //if(uid != '86913608335773696') continue;
                 //if(data.data[uid].status != 'online') continue;
@@ -181,7 +196,10 @@ function initWebsocket() {
         }
     });
     ws.addEventListener('open', function() { console.log('Websocket connected'); });
-    ws.addEventListener('close', function() {console.log('Websocket disconnected'); });
+    ws.addEventListener('close', function() {
+        console.log('Websocket disconnected');
+        cleanupEventListeners();
+    });
     ws.addEventListener('error', function(err) {console.log('Websocket error:', err); });
 
     // window.testMessage = function(message) {
