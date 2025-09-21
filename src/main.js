@@ -130,18 +130,25 @@ function initWebsocket() {
                     delete game.helpPanel;
                     return;
                 }
-                game.helpPanel = game.ui.addPanel({ left: 'auto', top: 'auto', w: 200, h: 75 });
-                game.ui.addLabel({ text: 'D-Zone '+version, top: 5, left: 'auto', parent: game.helpPanel });
+                game.helpPanel = game.ui.addPanel({ left: 'auto', top: 'auto', w: 200, h: 130 });
+                game.ui.addLabel({ text: 'D-Zone (fork) '+version, top: 5, left: 'auto', parent: game.helpPanel });
                 game.ui.addLabel({
                     text: packageInfo.description, top: 20, left: 2, maxWidth: 196, parent: game.helpPanel
                 });
                 game.ui.addLabel({
-                    text: ':icon-npm: View on npm', hyperlink: 'https://www.npmjs.com/package/d-zone',
-                    top: 50, left: 8, parent: game.helpPanel
+                    text: "This is a fork of D-Zone (originally by Vegeta897). It follows its own versioning and is not published on npm.", top: 50, left: 2, maxWidth: 196, parent: game.helpPanel
                 });
                 game.ui.addLabel({
-                    text: ':icon-github: View on GitHub', hyperlink: 'https://github.com/vegeta897/d-zone',
-                    top: 50, right: 8, parent: game.helpPanel
+                    text: ':icon-npm: View on npm', hyperlink: 'https://www.npmjs.com/package/d-zone',
+                    top: 90, left: 8, parent: game.helpPanel
+                });
+                game.ui.addLabel({
+                    text: 'View original :icon-github:', hyperlink: 'https://github.com/d-zone-org/d-zone',
+                    top: 90, right: 8, parent: game.helpPanel
+                });
+                game.ui.addLabel({
+                    text: 'View fork :icon-github:', hyperlink: 'https://github.com/nntin/d-zone',
+                    top: 110, right: 8, parent: game.helpPanel
                 });
             }});
             var startupServer = getStartupServer();

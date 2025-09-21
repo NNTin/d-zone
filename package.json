@@ -12,6 +12,7 @@
   "devDependencies": {
     "brfs": "^2.0.1",
     "browserify": "^17.0.0",
+    "concurrently": "^9.2.1",
     "terser": "^5.44.0",
     "watchify": "^4.0.0"
   },
@@ -19,9 +20,10 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "build:dev": "browserify src/main.js -t brfs -o dist/static/bundle.js && terser dist/static/bundle.js -o dist/static/bundle.min.js",
     "build:prod": "browserify src/main.js -t brfs | terser -c -m -o dist/static/bundle.min.js",
-    "watch": "watchify src/main.js -t brfs -d -o dist/static/bundle.js -v",
+    "watch": "watchify src/main.js -t brfs -d -o dist/static/bundle.min.js -v",
     "prestart": "npm run build:dev",
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "concurrently \"npm run watch\" \"npm start\""
   },
   "repository": {
     "type": "git",
