@@ -23,11 +23,49 @@ function initGame(images) {
     game.ui = new UI(game);
     //game.showGrid = true;
     //game.timeRenders = true;
+    
+    // Add help button immediately after UI initialization
+    addHelpButton();
+    
+    // Ensure UI is properly sized after adding the help button
+    game.renderer.canvases[0].onResize();
+    
     initWebsocket();
 
     window.pause = function() { game.paused = true; };
     window.unpause = function() { game.paused = false; };
     window.game = game;
+}
+
+function addHelpButton() {
+    // Help button
+    game.ui.addButton({ text: '?', bottom: 3, right: 3, w: 18, h: 18, onPress: function() {
+        if(game.helpPanel) {
+            game.helpPanel.remove();
+            delete game.helpPanel;
+            return;
+        }
+        game.helpPanel = game.ui.addPanel({ left: 'auto', top: 'auto', w: 200, h: 130 });
+        game.ui.addLabel({ text: 'D-Zone (fork) '+version, top: 5, left: 'auto', parent: game.helpPanel });
+        game.ui.addLabel({
+            text: packageInfo.description, top: 20, left: 2, maxWidth: 196, parent: game.helpPanel
+        });
+        game.ui.addLabel({
+            text: "This is a fork of D-Zone (originally by Vegeta897). It follows its own versioning and is not published on npm.", top: 50, left: 2, maxWidth: 196, parent: game.helpPanel
+        });
+        game.ui.addLabel({
+            text: ':icon-npm: View on npm', hyperlink: 'https://www.npmjs.com/package/d-zone',
+            top: 90, left: 8, parent: game.helpPanel
+        });
+        game.ui.addLabel({
+            text: 'View original :icon-github:', hyperlink: 'https://github.com/d-zone-org/d-zone',
+            top: 90, right: 8, parent: game.helpPanel
+        });
+        game.ui.addLabel({
+            text: 'View fork :icon-github:', hyperlink: 'https://github.com/nntin/d-zone',
+            top: 110, right: 8, parent: game.helpPanel
+        });
+    }});
 }
 
 function initWebsocket() {
@@ -123,34 +161,6 @@ function initWebsocket() {
                 game.serverListPanel.resizeChildren(widestButton, button.h);
                 game.serverListPanel.reposition();
             } });
-            // Help button
-            game.ui.addButton({ text: '?', bottom: 3, right: 3, w: 18, h: 18, onPress: function() {
-                if(game.helpPanel) {
-                    game.helpPanel.remove();
-                    delete game.helpPanel;
-                    return;
-                }
-                game.helpPanel = game.ui.addPanel({ left: 'auto', top: 'auto', w: 200, h: 130 });
-                game.ui.addLabel({ text: 'D-Zone (fork) '+version, top: 5, left: 'auto', parent: game.helpPanel });
-                game.ui.addLabel({
-                    text: packageInfo.description, top: 20, left: 2, maxWidth: 196, parent: game.helpPanel
-                });
-                game.ui.addLabel({
-                    text: "This is a fork of D-Zone (originally by Vegeta897). It follows its own versioning and is not published on npm.", top: 50, left: 2, maxWidth: 196, parent: game.helpPanel
-                });
-                game.ui.addLabel({
-                    text: ':icon-npm: View on npm', hyperlink: 'https://www.npmjs.com/package/d-zone',
-                    top: 90, left: 8, parent: game.helpPanel
-                });
-                game.ui.addLabel({
-                    text: 'View original :icon-github:', hyperlink: 'https://github.com/d-zone-org/d-zone',
-                    top: 90, right: 8, parent: game.helpPanel
-                });
-                game.ui.addLabel({
-                    text: 'View fork :icon-github:', hyperlink: 'https://github.com/nntin/d-zone',
-                    top: 110, right: 8, parent: game.helpPanel
-                });
-            }});
             var startupServer = getStartupServer();
             joinServer(startupServer);
         } else if(data.type === 'server-join') { // Initial server status

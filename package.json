@@ -21,7 +21,7 @@
     "build:dev": "browserify src/main.js -t brfs -o dist/static/bundle.js && terser dist/static/bundle.js -o dist/static/bundle.min.js",
     "build:prod": "browserify src/main.js -t brfs | terser -c -m -o dist/static/bundle.min.js",
     "watch": "watchify src/main.js -t brfs -d -o dist/static/bundle.min.js -v",
-    "prestart": "npm run build:dev",
+    "prestart": "npm run build:prod",
     "start": "node index.js",
     "dev": "concurrently \"npm run watch\" \"npm start\""
   },
