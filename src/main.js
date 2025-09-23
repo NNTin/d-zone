@@ -132,6 +132,12 @@ function initDiscordAuth() {
 function addHelpButton() {
     // Help button
     game.ui.addButton({ text: '?', bottom: 3, right: 3, w: 18, h: 18, onPress: function() {
+        // Close server panel if it's open
+        if(game.serverListPanel) {
+            game.serverListPanel.remove();
+            delete game.serverListPanel;
+        }
+        
         if(game.helpPanel) {
             game.helpPanel.remove();
             delete game.helpPanel;
@@ -217,6 +223,12 @@ function initWebsocket() {
             console.log('Got server list:', game.servers);
             // Server button
             game.ui.addButton({ text: 'Server', top: 3, right: 3, onPress: function() {
+                // Close help panel if it's open
+                if(game.helpPanel) {
+                    game.helpPanel.remove();
+                    delete game.helpPanel;
+                }
+                
                 if(game.serverListPanel) {
                     game.serverListPanel.remove();
                     delete game.serverListPanel;
