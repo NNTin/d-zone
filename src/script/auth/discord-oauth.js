@@ -35,6 +35,7 @@ DiscordOAuth.prototype.getAuthUrl = function() {
 
 DiscordOAuth.prototype.login = function() {
     var authUrl = this.getAuthUrl();
+    console.log('Starting Discord OAuth login with URL:', authUrl);
     
     // Store state for verification
     localStorage.setItem('discord_oauth_state', this.state);
@@ -42,20 +43,36 @@ DiscordOAuth.prototype.login = function() {
     // Open Discord OAuth in a popup window
     var popup = window.open(authUrl, 'discord_oauth', 'width=500,height=700,scrollbars=yes');
     
+    if (!popup) {
+        console.error('Popup was blocked by browser');
+        this.emit('login-error', 'Popup was blocked by browser. Please allow popups for this site.');
+        return;
+    }
+    
+    console.log('Discord OAuth popup opened successfully');
+    
     var self = this;
     
     // Listen for messages from the popup
     var messageHandler = function(event) {
-        if (event.origin !== window.location.origin) return;
+        console.log('Received message from popup:', event.data, 'from origin:', event.origin);
+        
+        if (event.origin !== window.location.origin) {
+            console.log('Ignoring message from different origin:', event.origin);
+            return;
+        }
         
         if (event.data.type === 'discord-auth-success') {
             var accessToken = event.data.accessToken;
             var state = event.data.state;
             var expiresIn = event.data.expiresIn;
             
+            console.log('Discord auth success received, access token length:', accessToken ? accessToken.length : 0);
+            
             window.removeEventListener('message', messageHandler);
             
             if (state !== self.state) {
+                console.error('State mismatch. Expected:', self.state, 'Received:', state);
                 self.emit('login-error', 'Invalid state parameter');
                 return;
             }
@@ -65,9 +82,11 @@ DiscordOAuth.prototype.login = function() {
                 self.storeAuth({ access_token: accessToken, expires_in: expiresIn });
                 self.fetchUserInfo();
             } else {
+                console.error('No access token in success message');
                 self.emit('login-error', 'No access token received');
             }
         } else if (event.data.type === 'discord-auth-error') {
+            console.error('Discord auth error received:', event.data.error);
             window.removeEventListener('message', messageHandler);
             self.emit('login-error', event.data.error);
         }
@@ -78,6 +97,7 @@ DiscordOAuth.prototype.login = function() {
     // Fallback: Check if popup was closed
     var pollTimer = setInterval(function() {
         if (popup.closed) {
+            console.log('Discord OAuth popup was closed');
             clearInterval(pollTimer);
             window.removeEventListener('message', messageHandler);
             self.emit('login-cancelled');

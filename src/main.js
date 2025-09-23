@@ -42,11 +42,41 @@ function initGame(images) {
 }
 
 function initDiscordAuth() {
+    // Debug: Log the constructed redirect URI
+    var redirectUri = window.location.origin + window.location.pathname.replace('index.html', '') + 'discord-callback.html';
+    console.log('Discord OAuth redirect URI:', redirectUri);
+    console.log('Current location:', window.location.href);
+    console.log('Window origin:', window.location.origin);
+    console.log('Window pathname:', window.location.pathname);
+    
+    // Test if callback page is accessible
+    fetch(redirectUri)
+        .then(function(response) {
+            console.log('Callback page test - Status:', response.status);
+            if (response.ok) {
+                console.log('✓ Callback page is accessible');
+            } else {
+                console.error('✗ Callback page not accessible - Status:', response.status);
+            }
+        })
+        .catch(function(error) {
+            console.error('✗ Callback page test failed:', error);
+        });
+    
     discordAuth = new DiscordOAuth({
         clientId: "506432803173433344",
-        redirectUri: window.location.origin + window.location.pathname.replace('index.html', '') + 'discord-callback.html',
+        redirectUri: redirectUri,
         scopes: ['identify']
     });
+    
+    // Add debug logging to the login method
+    var originalLogin = discordAuth.login;
+    discordAuth.login = function() {
+        var authUrl = this.getAuthUrl();
+        console.log('Discord OAuth URL:', authUrl);
+        console.log('Opening Discord OAuth popup...');
+        return originalLogin.apply(this, arguments);
+    };
     
     discordAuth.on('login-success', function(user) {
         console.log('Discord login successful:', user);
@@ -310,14 +340,39 @@ window.onpopstate = function(event) {
 function joinServer(server) {
     var connectionMessage = { type: 'connect', data: { server: server.id } };
     
+    // Find the server data by looking through all servers for matching ID
+    var serverData = null;
+    for(var discordId in game.servers) {
+        if(game.servers.hasOwnProperty(discordId) && game.servers[discordId].id === server.id) {
+            serverData = game.servers[discordId];
+            break;
+        }
+    }
+    
+    console.log('Server lookup result:', {
+        requestedServerId: server.id,
+        foundServerData: serverData,
+        allServers: game.servers
+    });
+    
     // Only send Discord OAuth token for passworded servers
-    var serverData = game.servers && game.servers[server.id];
     if(serverData && serverData.passworded && discordAuth && discordAuth.isLoggedIn()) {
         connectionMessage.data.discordToken = discordAuth.accessToken;
         connectionMessage.data.discordUser = discordAuth.getUser();
+        console.log('Sending Discord OAuth data:', {
+            token: discordAuth.accessToken ? discordAuth.accessToken.substring(0, 10) + '...' : 'null',
+            user: discordAuth.getUser()
+        });
+    } else {
+        console.log('Not sending Discord OAuth data. Conditions:', {
+            serverFound: !!serverData,
+            serverPassworded: serverData ? serverData.passworded : 'unknown',
+            discordAuthExists: !!discordAuth,
+            discordLoggedIn: discordAuth ? discordAuth.isLoggedIn() : false
+        });
     }
     
-    console.log('Requesting to join server', server.id);
+    console.log('Requesting to join server', server.id, 'with message:', connectionMessage);
     ws.send(new Buffer(JSON.stringify(connectionMessage)));
 }
 
