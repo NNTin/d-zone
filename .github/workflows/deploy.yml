@@ -30,8 +30,32 @@ jobs:
           npx browserify src/main.js -t brfs | npx terser -c -m -o build/$VERSION/static/bundle.min.js
           cp -r dist/* build/$VERSION
 
-          # Create root index.html that redirects to the current version
-          echo "<!DOCTYPE html><html><head><meta http-equiv='refresh' content='0; url=${VERSION}/'></head><body>Redirecting to latest version...</body></html>" > build/index.html
+          # Create root index.html that redirects to the current version, preserving socketURL parameter if present
+          cat > build/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <script>
+              // Get socketURL parameter if present
+              const urlParams = new URLSearchParams(window.location.search);
+              const socketURL = urlParams.get('socketURL');
+              
+              // Build redirect URL
+              let redirectUrl = '$VERSION/';
+              if (socketURL) {
+                redirectUrl += '?socketURL=' + encodeURIComponent(socketURL);
+              }
+              
+              // Redirect immediately
+              window.location.href = redirectUrl;
+            </script>
+            <meta http-equiv="refresh" content="0; url=$VERSION/">
+          </head>
+          <body>
+            Redirecting to latest version...
+          </body>
+          </html>
+          EOF
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
