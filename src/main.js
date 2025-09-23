@@ -95,8 +95,9 @@ function initDiscordAuth() {
             delete game.helpPanel;
             // Reopen help panel to show updated login status
             setTimeout(function() {
-                addHelpButton();
-                game.ui.elements[game.ui.elements.length - 1].onPress();
+                if(game.helpButton && game.helpButton.onPress) {
+                    game.helpButton.onPress();
+                }
             }, 100);
         }
     });
@@ -119,8 +120,9 @@ function initDiscordAuth() {
             delete game.helpPanel;
             // Reopen help panel to show updated login status
             setTimeout(function() {
-                addHelpButton();
-                game.ui.elements[game.ui.elements.length - 1].onPress();
+                if(game.helpButton && game.helpButton.onPress) {
+                    game.helpButton.onPress();
+                }
             }, 100);
         }
     });
@@ -131,7 +133,7 @@ function initDiscordAuth() {
 
 function addHelpButton() {
     // Help button
-    game.ui.addButton({ text: '?', bottom: 3, right: 3, w: 18, h: 18, onPress: function() {
+    game.helpButton = game.ui.addButton({ text: '?', bottom: 3, right: 3, w: 18, h: 18, onPress: function() {
         // Close server panel if it's open
         if(game.serverListPanel) {
             game.serverListPanel.remove();
@@ -170,6 +172,7 @@ function addHelpButton() {
             game.ui.addLabel({
                 text: ':icon-lock: ' + user.username,
                 top: 110, left: 8, parent: game.helpPanel,
+                hyperlink: '#', // Use placeholder to enable cursor change
                 onPress: function() {
                     // Show logout option
                     if(window.confirm('Logout from Discord?')) {
@@ -181,6 +184,7 @@ function addHelpButton() {
             game.ui.addLabel({
                 text: ':icon-lock: Login with Discord',
                 top: 110, left: 8, parent: game.helpPanel,
+                hyperlink: '#', // Add hyperlink property to make cursor change on hover
                 onPress: function() {
                     if(discordAuth) {
                         discordAuth.login();
