@@ -67,6 +67,9 @@ Label.prototype.onMouseUp = function(mouseEvent) {
     if(!this.mouseOn) return;
     this.pressed = false;
     if(this.onPress) this.onPress();
-    if(this.hyperlink) window.open(this.hyperlink);
+    // Only open hyperlink if it's not a placeholder value
+    if(this.hyperlink && this.hyperlink !== '#' && this.hyperlink !== 'javascript:void(0)') {
+        window.open(this.hyperlink);
+    }
     this.draw();
 };
