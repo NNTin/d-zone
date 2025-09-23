@@ -41,34 +41,37 @@ function initGame(images) {
     window.game = game;
 }
 
-function initDiscordAuth() {
-    // Debug: Log the constructed redirect URI
-    var redirectUri = window.location.origin + window.location.pathname.replace('index.html', '') + 'discord-callback.html';
-    console.log('Discord OAuth redirect URI:', redirectUri);
-    console.log('Current location:', window.location.href);
-    console.log('Window origin:', window.location.origin);
-    console.log('Window pathname:', window.location.pathname);
+function reinitializeDiscordAuth(newClientId) {
+    console.log('Reinitializing Discord OAuth with new client ID:', newClientId);
     
-    // Test if callback page is accessible
-    fetch(redirectUri)
-        .then(function(response) {
-            console.log('Callback page test - Status:', response.status);
-            if (response.ok) {
-                console.log('✓ Callback page is accessible');
-            } else {
-                console.error('✗ Callback page not accessible - Status:', response.status);
-            }
-        })
-        .catch(function(error) {
-            console.error('✗ Callback page test failed:', error);
-        });
+    // Store the current state
+    var wasLoggedIn = discordAuth && discordAuth.isLoggedIn();
+    var currentUser = discordAuth ? discordAuth.getUser() : null;
+    
+    // Create new Discord OAuth instance with updated client ID
+    var redirectUri = window.location.origin + window.location.pathname.replace('index.html', '') + 'discord-callback.html';
     
     discordAuth = new DiscordOAuth({
-        clientId: "506432803173433344",
+        clientId: newClientId,
         redirectUri: redirectUri,
         scopes: ['identify']
     });
     
+    // Re-add event handlers
+    setupDiscordAuthEventHandlers();
+    
+    // If user was logged in before, they might need to re-authenticate
+    // since the client ID changed, but we'll preserve the current state for now
+    if (wasLoggedIn && currentUser) {
+        console.log('Discord OAuth client ID updated. User may need to re-authenticate if they encounter issues.');
+        // The stored access token may not work with the new client ID
+        // but we'll let the user discover this naturally rather than forcing re-auth
+    }
+    
+    console.log('Discord OAuth reinitialized successfully');
+}
+
+function setupDiscordAuthEventHandlers() {
     // Add debug logging to the login method
     var originalLogin = discordAuth.login;
     discordAuth.login = function() {
@@ -126,9 +129,39 @@ function initDiscordAuth() {
             }, 100);
         }
     });
+}
+
+function initDiscordAuth() {
+    // Debug: Log the constructed redirect URI
+    var redirectUri = window.location.origin + window.location.pathname.replace('index.html', '') + 'discord-callback.html';
+    console.log('Discord OAuth redirect URI:', redirectUri);
+    console.log('Current location:', window.location.href);
+    console.log('Window origin:', window.location.origin);
+    console.log('Window pathname:', window.location.pathname);
     
-    // Update UI based on current login status
-    // No longer needed since we removed the separate login button
+    // Test if callback page is accessible
+    fetch(redirectUri)
+        .then(function(response) {
+            console.log('Callback page test - Status:', response.status);
+            if (response.ok) {
+                console.log('✓ Callback page is accessible');
+            } else {
+                console.error('✗ Callback page not accessible - Status:', response.status);
+            }
+        })
+        .catch(function(error) {
+            console.error('✗ Callback page test failed:', error);
+        });
+    
+    // Initialize with a placeholder - the real client ID will be set by the server
+    discordAuth = new DiscordOAuth({
+        clientId: "506432803173433344", // fallback client ID
+        redirectUri: redirectUri,
+        scopes: ['identify']
+    });
+    
+    // Setup event handlers for Discord OAuth
+    setupDiscordAuthEventHandlers();
 }
 
 function addHelpButton() {
@@ -288,6 +321,12 @@ function initWebsocket() {
             var requestServer = data.data.request.server;
             localStorage.setItem('dzone-default-server', JSON.stringify({ id: requestServer }));
             
+            // Update Discord OAuth client ID if provided
+            if(data.data.clientId && discordAuth) {
+                console.log('Setting Discord OAuth client ID from server-join:', data.data.clientId);
+                reinitializeDiscordAuth(data.data.clientId);
+            }
+            
             // Clean up existing event listeners to prevent memory leaks
             cleanupEventListeners();
             
@@ -327,6 +366,44 @@ function initWebsocket() {
         } else if(data.type === 'error') {
             window.alert(data.data.message);
             if(!game.world) joinServer({id: 'default'});
+        } else if(data.type === 'update-clientid') { // Client ID update
+            console.log('Received client ID update:', data.data.clientId);
+            if(data.data.clientId && discordAuth) {
+                reinitializeDiscordAuth(data.data.clientId);
+                // Show a notification to the user that the OAuth configuration has been updated
+                if(game && game.ui) {
+                    // Create a temporary notification panel
+                    var notificationPanel = game.ui.addPanel({ 
+                        left: 'auto', 
+                        top: 50, 
+                        w: 250, 
+                        h: 60,
+                        backgroundColor: '#2c3e50'
+                    });
+                    game.ui.addLabel({ 
+                        text: '🔄 Discord OAuth Updated', 
+                        top: 5, 
+                        left: 'auto', 
+                        parent: notificationPanel,
+                        color: '#ecf0f1'
+                    });
+                    game.ui.addLabel({ 
+                        text: 'Discord login configuration has been updated.', 
+                        top: 25, 
+                        left: 5, 
+                        maxWidth: 240, 
+                        parent: notificationPanel,
+                        color: '#bdc3c7'
+                    });
+                    
+                    // Auto-remove the notification after 5 seconds
+                    setTimeout(function() {
+                        if(notificationPanel && notificationPanel.remove) {
+                            notificationPanel.remove();
+                        }
+                    }, 5000);
+                }
+            }
         } else {
             //console.log('Websocket data:',data);
         }
