@@ -5,6 +5,7 @@ var Game = require('./script/engine/game.js');
 var Renderer = require('./script/engine/renderer.js');
 var Canvas = require('./script/engine/canvas.js');
 var UI = require('./script/ui/ui.js');
+var DiscordOAuth = require('./script/auth/discord-oauth.js');
 var packageInfo = require('./../package.json');
 var socketConfig = require('./socket-config.json');
 
@@ -12,7 +13,7 @@ var socketConfig = require('./socket-config.json');
 console.log('Loading...');
 var version = packageInfo.version;
 var preloader = new Preloader(initGame);
-var game, ws;
+var game, ws, discordAuth;
 
 function initGame(images) {
     game = new Game({ step: 1000 / 60 });
@@ -23,11 +24,175 @@ function initGame(images) {
     game.ui = new UI(game);
     //game.showGrid = true;
     //game.timeRenders = true;
+    
+    // Initialize Discord OAuth
+    initDiscordAuth();
+    
+    // Add help button immediately after UI initialization
+    addHelpButton();
+    
+    // Ensure UI is properly sized after adding the help button
+    game.renderer.canvases[0].onResize();
+    
     initWebsocket();
 
     window.pause = function() { game.paused = true; };
     window.unpause = function() { game.paused = false; };
     window.game = game;
+}
+
+function initDiscordAuth() {
+    // Debug: Log the constructed redirect URI
+    var redirectUri = window.location.origin + window.location.pathname.replace('index.html', '') + 'discord-callback.html';
+    console.log('Discord OAuth redirect URI:', redirectUri);
+    console.log('Current location:', window.location.href);
+    console.log('Window origin:', window.location.origin);
+    console.log('Window pathname:', window.location.pathname);
+    
+    // Test if callback page is accessible
+    fetch(redirectUri)
+        .then(function(response) {
+            console.log('Callback page test - Status:', response.status);
+            if (response.ok) {
+                console.log('✓ Callback page is accessible');
+            } else {
+                console.error('✗ Callback page not accessible - Status:', response.status);
+            }
+        })
+        .catch(function(error) {
+            console.error('✗ Callback page test failed:', error);
+        });
+    
+    discordAuth = new DiscordOAuth({
+        clientId: "506432803173433344",
+        redirectUri: redirectUri,
+        scopes: ['identify']
+    });
+    
+    // Add debug logging to the login method
+    var originalLogin = discordAuth.login;
+    discordAuth.login = function() {
+        var authUrl = this.getAuthUrl();
+        console.log('Discord OAuth URL:', authUrl);
+        console.log('Opening Discord OAuth popup...');
+        return originalLogin.apply(this, arguments);
+    };
+    
+    discordAuth.on('login-success', function(user) {
+        console.log('Discord login successful:', user);
+        // Store user info
+        localStorage.setItem('discord_user', JSON.stringify(user));
+        
+        // If user was trying to join a server, try again now that they're authenticated
+        if(game.pendingServerJoin) {
+            joinServer(game.pendingServerJoin);
+            delete game.pendingServerJoin;
+        }
+        
+        // Update help panel if it's open
+        if(game.helpPanel) {
+            game.helpPanel.remove();
+            delete game.helpPanel;
+            // Reopen help panel to show updated login status
+            setTimeout(function() {
+                if(game.helpButton && game.helpButton.onPress) {
+                    game.helpButton.onPress();
+                }
+            }, 100);
+        }
+    });
+    
+    discordAuth.on('login-error', function(error) {
+        console.error('Discord login error:', error);
+        window.alert('Discord login failed: ' + error);
+    });
+    
+    discordAuth.on('login-cancelled', function() {
+        console.log('Discord login cancelled by user');
+    });
+    
+    discordAuth.on('logout', function() {
+        console.log('Discord logout');
+        
+        // Update help panel if it's open
+        if(game.helpPanel) {
+            game.helpPanel.remove();
+            delete game.helpPanel;
+            // Reopen help panel to show updated login status
+            setTimeout(function() {
+                if(game.helpButton && game.helpButton.onPress) {
+                    game.helpButton.onPress();
+                }
+            }, 100);
+        }
+    });
+    
+    // Update UI based on current login status
+    // No longer needed since we removed the separate login button
+}
+
+function addHelpButton() {
+    // Help button
+    game.helpButton = game.ui.addButton({ text: '?', bottom: 3, right: 3, w: 18, h: 18, onPress: function() {
+        // Close server panel if it's open
+        if(game.serverListPanel) {
+            game.serverListPanel.remove();
+            delete game.serverListPanel;
+        }
+        
+        if(game.helpPanel) {
+            game.helpPanel.remove();
+            delete game.helpPanel;
+            return;
+        }
+        game.helpPanel = game.ui.addPanel({ left: 'auto', top: 'auto', w: 200, h: 130 });
+        game.ui.addLabel({ text: 'D-Zone (fork) '+version, top: 5, left: 'auto', parent: game.helpPanel });
+        game.ui.addLabel({
+            text: packageInfo.description, top: 20, left: 2, maxWidth: 196, parent: game.helpPanel
+        });
+        game.ui.addLabel({
+            text: "This is a fork of D-Zone (originally by Vegeta897). It follows its own versioning and is not published on npm.", top: 50, left: 2, maxWidth: 196, parent: game.helpPanel
+        });
+        game.ui.addLabel({
+            text: ':icon-npm: View on npm', hyperlink: 'https://www.npmjs.com/package/d-zone',
+            top: 90, left: 8, parent: game.helpPanel
+        });
+        game.ui.addLabel({
+            text: 'View original :icon-github:', hyperlink: 'https://github.com/d-zone-org/d-zone',
+            top: 90, right: 8, parent: game.helpPanel
+        });
+        game.ui.addLabel({
+            text: 'View fork :icon-github:', hyperlink: 'https://github.com/nntin/d-zone',
+            top: 110, right: 8, parent: game.helpPanel
+        });
+        
+        // Discord login/logout functionality
+        if(discordAuth && discordAuth.isLoggedIn()) {
+            var user = discordAuth.getUser();
+            game.ui.addLabel({
+                text: ':icon-lock: ' + user.username,
+                top: 110, left: 8, parent: game.helpPanel,
+                hyperlink: '#', // Use placeholder to enable cursor change
+                onPress: function() {
+                    // Show logout option
+                    if(window.confirm('Logout from Discord?')) {
+                        discordAuth.logout();
+                    }
+                }
+            });
+        } else {
+            game.ui.addLabel({
+                text: ':icon-lock: Login with Discord',
+                top: 110, left: 8, parent: game.helpPanel,
+                hyperlink: '#', // Add hyperlink property to make cursor change on hover
+                onPress: function() {
+                    if(discordAuth) {
+                        discordAuth.login();
+                    }
+                }
+            });
+        }
+    }});
 }
 
 function initWebsocket() {
@@ -62,44 +227,31 @@ function initWebsocket() {
             console.log('Got server list:', game.servers);
             // Server button
             game.ui.addButton({ text: 'Server', top: 3, right: 3, onPress: function() {
+                // Close help panel if it's open
+                if(game.helpPanel) {
+                    game.helpPanel.remove();
+                    delete game.helpPanel;
+                }
+                
                 if(game.serverListPanel) {
                     game.serverListPanel.remove();
                     delete game.serverListPanel;
                     return;
                 }
                 var joinThisServer = function(server) { return function() {
-                    var params = '?s=' + server.id;
-                    if(server.password) params += '&p=' + server.password;
-                    if(server.passworded) {
-                        var submitPassword = function(pass) {
-                            server.password = pass;
-                            if(window.location.protocol !== 'file:') window.history.pushState(
-                                { server: server.id, password: server.password },
-                                server.id, window.location.pathname + params
-                            );
-                            joinServer(server);
-                            game.passwordPromptPanel.remove();
-                            delete game.passwordPromptPanel;
-                        };
-                        game.passwordPromptPanel = game.ui.addPanel({
-                            left: 'auto', top: 'auto', w: 102, h: 28
-                        });
-                        game.passwordPromptInput = game.ui.addInput({
-                            left: 5, top: 5, w: 65, h: 18, parent: game.passwordPromptPanel,
-                            onSubmit: submitPassword, text: server.password ? server.password : ''
-                        });
-                        game.passwordPromptInput.focus();
-                        game.passwordPromptOK = game.ui.addButton({
-                            text: 'OK', right: 5, top: 5, w: 24, h: 18, parent: game.passwordPromptPanel,
-                            onPress: game.passwordPromptInput.submit.bind(game.passwordPromptInput)
-                        });
-                    } else {
-                        if(window.location.protocol !== 'file:') window.history.pushState(
-                            {server: server.id, password: server.password},
-                            server.id, window.location.pathname + params
-                        );
-                        joinServer(server);
+                    // Check if Discord authentication is required only for passworded servers
+                    if(server.passworded && (!discordAuth || !discordAuth.isLoggedIn())) {
+                        game.pendingServerJoin = server;
+                        window.alert('This server requires Discord authentication. Please login with Discord first.');
+                        return;
                     }
+                    
+                    var params = '?s=' + server.id;
+                    if(window.location.protocol !== 'file:') window.history.pushState(
+                        {server: server.id},
+                        server.id, window.location.pathname + params
+                    );
+                    joinServer(server);
                     game.serverListPanel.remove();
                     delete game.serverListPanel;
                 } };
@@ -111,9 +263,10 @@ function initWebsocket() {
                 var button;
                 for(var sKey in game.servers) { if(!game.servers.hasOwnProperty(sKey)) continue;
                     var server = game.servers[sKey];
-                    var serverLock = game.servers[sKey].passworded ? ':icon-lock-small: ' : '';
+                    // Show lock icon for servers that require Discord OAuth (passworded servers)
+                    var serverLock = server.passworded ? ':icon-lock-small: ' : '';
                     button = game.ui.addButton({
-                        text: serverLock+game.servers[sKey].name, left: 5, top: 5 + serverButtonY * 21,
+                        text: serverLock + game.servers[sKey].name, left: 5, top: 5 + serverButtonY * 21,
                         w: 136, h: 18, parent: game.serverListPanel, onPress: new joinThisServer(server), disabled: game.server === server.id
                     });
                     widestButton = Math.max(widestButton, button.textCanvas.width + 2);
@@ -123,40 +276,17 @@ function initWebsocket() {
                 game.serverListPanel.resizeChildren(widestButton, button.h);
                 game.serverListPanel.reposition();
             } });
-            // Help button
-            game.ui.addButton({ text: '?', bottom: 3, right: 3, w: 18, h: 18, onPress: function() {
-                if(game.helpPanel) {
-                    game.helpPanel.remove();
-                    delete game.helpPanel;
-                    return;
-                }
-                game.helpPanel = game.ui.addPanel({ left: 'auto', top: 'auto', w: 200, h: 130 });
-                game.ui.addLabel({ text: 'D-Zone (fork) '+version, top: 5, left: 'auto', parent: game.helpPanel });
-                game.ui.addLabel({
-                    text: packageInfo.description, top: 20, left: 2, maxWidth: 196, parent: game.helpPanel
-                });
-                game.ui.addLabel({
-                    text: "This is a fork of D-Zone (originally by Vegeta897). It follows its own versioning and is not published on npm.", top: 50, left: 2, maxWidth: 196, parent: game.helpPanel
-                });
-                game.ui.addLabel({
-                    text: ':icon-npm: View on npm', hyperlink: 'https://www.npmjs.com/package/d-zone',
-                    top: 90, left: 8, parent: game.helpPanel
-                });
-                game.ui.addLabel({
-                    text: 'View original :icon-github:', hyperlink: 'https://github.com/d-zone-org/d-zone',
-                    top: 90, right: 8, parent: game.helpPanel
-                });
-                game.ui.addLabel({
-                    text: 'View fork :icon-github:', hyperlink: 'https://github.com/nntin/d-zone',
-                    top: 110, right: 8, parent: game.helpPanel
-                });
-            }});
             var startupServer = getStartupServer();
-            joinServer(startupServer);
+            // Only require Discord auth for passworded servers
+            var serverData = game.servers[startupServer.id];
+            if(!serverData || !serverData.passworded || (discordAuth && discordAuth.isLoggedIn())) {
+                joinServer(startupServer);
+            } else {
+                game.pendingServerJoin = startupServer;
+            }
         } else if(data.type === 'server-join') { // Initial server status
             var requestServer = data.data.request.server;
-            var requestPass = data.data.request.password;
-            localStorage.setItem('dzone-default-server', JSON.stringify({ id: requestServer, password: requestPass }));
+            localStorage.setItem('dzone-default-server', JSON.stringify({ id: requestServer }));
             
             // Clean up existing event listeners to prevent memory leaks
             cleanupEventListeners();
@@ -170,7 +300,6 @@ function initWebsocket() {
             game.decorator = decorator;
             users = new Users(game, world);
             var params = '?s=' + data.data.request.server;
-            if(requestPass) params += '&p=' + requestPass;
             if(window.location.protocol !== 'file:') window.history.replaceState(
                 data.data.request, requestServer, window.location.pathname + params
             );
@@ -221,14 +350,45 @@ function initWebsocket() {
 
 window.onpopstate = function(event) {
     var server = { id: event.state.server };
-    if(event.state.password) server.password = event.state.password;
     joinServer(server);
 };
 
 function joinServer(server) {
     var connectionMessage = { type: 'connect', data: { server: server.id } };
-    if(server.password) connectionMessage.data.password = server.password;
-    console.log('Requesting to join server', server.id);
+    
+    // Find the server data by looking through all servers for matching ID
+    var serverData = null;
+    for(var discordId in game.servers) {
+        if(game.servers.hasOwnProperty(discordId) && game.servers[discordId].id === server.id) {
+            serverData = game.servers[discordId];
+            break;
+        }
+    }
+    
+    console.log('Server lookup result:', {
+        requestedServerId: server.id,
+        foundServerData: serverData,
+        allServers: game.servers
+    });
+    
+    // Only send Discord OAuth token for passworded servers
+    if(serverData && serverData.passworded && discordAuth && discordAuth.isLoggedIn()) {
+        connectionMessage.data.discordToken = discordAuth.accessToken;
+        connectionMessage.data.discordUser = discordAuth.getUser();
+        console.log('Sending Discord OAuth data:', {
+            token: discordAuth.accessToken ? discordAuth.accessToken.substring(0, 10) + '...' : 'null',
+            user: discordAuth.getUser()
+        });
+    } else {
+        console.log('Not sending Discord OAuth data. Conditions:', {
+            serverFound: !!serverData,
+            serverPassworded: serverData ? serverData.passworded : 'unknown',
+            discordAuthExists: !!discordAuth,
+            discordLoggedIn: discordAuth ? discordAuth.isLoggedIn() : false
+        });
+    }
+    
+    console.log('Requesting to join server', server.id, 'with message:', connectionMessage);
     ws.send(new Buffer(JSON.stringify(connectionMessage)));
 }
 
@@ -240,7 +400,7 @@ function getStartupServer() {
         if(startupServer) startupServer = JSON.parse(startupServer);
     }
     if(!startupServer/* || !game.servers[startupServer.id]*/) startupServer = { id: 'default' };
-    if(util.getURLParameter('p')) startupServer.password = util.getURLParameter('p');
+    // Remove password parameter support since we use Discord OAuth
     return startupServer;
 }
 
