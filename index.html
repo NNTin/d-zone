@@ -1,1 +1,23 @@
-<!DOCTYPE html><html><head><meta http-equiv='refresh' content='0; url=0.0.7/'></head><body>Redirecting to latest version...</body></html>
+<!DOCTYPE html>
+<html>
+<head>
+  <script>
+    // Get socketURL parameter if present
+    const urlParams = new URLSearchParams(window.location.search);
+    const socketURL = urlParams.get('socketURL');
+    
+    // Build redirect URL
+    let redirectUrl = '$VERSION/';
+    if (socketURL) {
+      redirectUrl += '?socketURL=' + encodeURIComponent(socketURL);
+    }
+    
+    // Redirect immediately
+    window.location.href = redirectUrl;
+  </script>
+  <meta http-equiv="refresh" content="0; url=$VERSION/">
+</head>
+<body>
+  Redirecting to latest version...
+</body>
+</html>
