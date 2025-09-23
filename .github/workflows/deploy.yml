@@ -31,7 +31,7 @@ jobs:
           cp -r dist/* build/$VERSION
 
           # Create root index.html that redirects to the current version, preserving socketURL parameter if present
-          cat > build/index.html << 'EOF'
+          cat > build/index.html << EOF
           <!DOCTYPE html>
           <html>
           <head>
@@ -41,7 +41,7 @@ jobs:
               const socketURL = urlParams.get('socketURL');
               
               // Build redirect URL
-              let redirectUrl = '$VERSION/';
+              let redirectUrl = '${VERSION}/';
               if (socketURL) {
                 redirectUrl += '?socketURL=' + encodeURIComponent(socketURL);
               }
@@ -49,7 +49,7 @@ jobs:
               // Redirect immediately
               window.location.href = redirectUrl;
             </script>
-            <meta http-equiv="refresh" content="0; url=$VERSION/">
+            <meta http-equiv="refresh" content="0; url=${VERSION}/">
           </head>
           <body>
             Redirecting to latest version...
