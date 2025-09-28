@@ -7,7 +7,6 @@ var Canvas = require('./script/engine/canvas.js');
 var UI = require('./script/ui/ui.js');
 var DiscordOAuth = require('./script/auth/discord-oauth.js');
 var packageInfo = require('./../package.json');
-var socketConfig = require('./socket-config.json');
 
 // TODO: Loading screen while preloading images, connecting to websocket, and generating world
 console.log('Loading...');
