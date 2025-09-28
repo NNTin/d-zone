@@ -338,7 +338,6 @@ function initWebsocket(): void {
     function tryNextWebsocketConnection(): void {
         if (currentStrategyIndex >= fallbackStrategies.length) {
             console.error('All websocket connection strategies failed');
-            (window as any).alert('Unable to connect to any websocket server. Please check your connection.');
             return;
         }
 
@@ -547,16 +546,20 @@ function initWebsocket(): void {
         ws.addEventListener('close', function() {
             console.log('Websocket disconnected from: ' + strategy.description);
             cleanupEventListeners();
-            // Try next strategy
-            currentStrategyIndex++;
-            setTimeout(tryNextWebsocketConnection, 1000); // Wait 1 second before trying next strategy
+            // Only try next strategy if we haven't already moved to the next one due to an error
+            if (currentStrategyIndex === fallbackStrategies.indexOf(strategy)) {
+                currentStrategyIndex++;
+                setTimeout(tryNextWebsocketConnection, 1000); // Wait 1 second before trying next strategy
+            }
         });
         
         ws.addEventListener('error', function(err) {
             console.log('Websocket error with strategy ' + (currentStrategyIndex + 1) + '/' + fallbackStrategies.length + ' (' + strategy.description + '):', err);
-            // Try next strategy
-            currentStrategyIndex++;
-            setTimeout(tryNextWebsocketConnection, 1000); // Wait 1 second before trying next strategy
+            // Only increment if we haven't already incremented due to close event
+            if (currentStrategyIndex === fallbackStrategies.indexOf(strategy)) {
+                currentStrategyIndex++;
+                setTimeout(tryNextWebsocketConnection, 1000); // Wait 1 second before trying next strategy
+            }
         });
     }
 
