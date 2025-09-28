@@ -87,10 +87,13 @@ export default class Actor extends WorldObject {
     }
 
     addToGame(game: any): void {
+        console.log('Actor: Adding actor', this.uid, 'to game');
         super.addToGame(game);
         game.on('update', this.onUpdate.bind(this));
         // Initialize default behavior
+        console.log('Actor: Adding Wander behavior to actor', this.uid);
         this.behaviors.push(new Wander(this));
+        console.log('Actor: Actor', this.uid, 'now has', this.behaviors.length, 'behaviors');
     }
 
     updatePresence(presence: string): void {
@@ -217,14 +220,17 @@ export default class Actor extends WorldObject {
 
     startTalking(message: any, channel?: string, onStop?: () => void): void {
         this.talking = true;
-        this.talkTimeLeft = Math.max(60, message.content.length * 4);
+        
+        // Handle both string messages and object messages with content property
+        const messageText = typeof message === 'string' ? message : (message.content || message.message || '');
+        this.talkTimeLeft = Math.max(60, messageText.length * 4);
         
         if (this.talkBox) {
             this.talkBox.remove();
         }
         
         this.talkBox = (this.game as any).ui.addLabel({
-            text: message.content,
+            text: messageText,
             screen: { x: this.preciseScreen.x, y: this.preciseScreen.y - 20 },
             maxWidth: 200,
             backgroundColor: '#000000',

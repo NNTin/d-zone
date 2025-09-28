@@ -215,6 +215,11 @@ export class Canvas extends EventEmitter {
     }
 
     drawBG(bgCanvas: BGCanvas): void {
+        console.log('Canvas: drawBG called with bgCanvas:', bgCanvas);
+        if (!bgCanvas || !bgCanvas.image) {
+            console.log('Canvas: No bgCanvas or bgCanvas.image');
+            return;
+        }
         const x = bgCanvas.x + this.halfWidth + this.panning.panned.x;
         const y = bgCanvas.y + this.halfHeight + this.panning.panned.y;
         

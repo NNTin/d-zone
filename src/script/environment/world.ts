@@ -82,8 +82,12 @@ export default class World extends EventEmitter {
     }
 
     private async init(): Promise<void> {
+        console.log('World: Starting initialization...');
+        
         // Load dependencies dynamically
         try {
+            console.log('World: Loading dependencies...');
+            
             const [SlabModule, TileModule, TileSheetModule, PathfinderModule] = await Promise.all([
                 import('./slab.js'),
                 import('./tile.js'),
@@ -91,31 +95,46 @@ export default class World extends EventEmitter {
                 import('../actors/pathfinder.js')
             ]);
 
+            console.log('World: Dependencies loaded successfully');
+            console.log('SlabModule:', SlabModule);
+            console.log('TileModule:', TileModule);
+            console.log('TileSheetModule:', TileSheetModule);
+            console.log('PathfinderModule:', PathfinderModule);
+
             SlabClass = SlabModule.default;
             TileClass = TileModule.default;
             TileSheetClass = TileSheetModule.default;
             PathfinderClass = PathfinderModule.default;
 
+            console.log('World: Classes assigned, starting world generation...');
             this.generateWorld();
         } catch (error) {
-            console.error('Failed to load world dependencies:', error);
+            console.error('World: Failed to load world dependencies:', error);
+            if (error instanceof Error) {
+                console.error('World: Error stack:', error.stack);
+            }
             // Fall back to simpler world generation or throw error
             throw error;
         }
     }
 
     private generateWorld(): void {
+        console.log('World: generateWorld() called');
         geometry.generateClosestGrids(this.worldSize);
+        console.log('World: Generated closest grids');
         
         testCanvas.clear();
         
         const noiseBig = geometry.buildNoiseMap(this.worldRadius / 3 + 1, this.worldRadius / 3 + 1);
         const noiseSmall = geometry.buildNoiseMap(this.worldRadius / 1.5 + 1, this.worldRadius / 1.5 + 1);
+        console.log('World: Built noise maps');
+        
         const bigBlur = (noiseBig.length - 1) / this.worldSize;
         const smallBlur = (noiseSmall.length - 1) / this.worldSize;
         
         this.mapBounds = { xl: 0, yl: 0, xh: 0, yh: 0 };
         
+        console.log('World: Starting world generation loop...');
         for(let tx = 0; tx < this.worldSize; tx++) {
             for(let ty = 0; ty < this.worldSize; ty++) {
                 const bigNoiseValue = geometry.getNoiseMapPoint(noiseBig, tx * bigBlur, ty * bigBlur);
@@ -140,9 +159,13 @@ export default class World extends EventEmitter {
             }
         }
         
+        console.log('World: Generated', Object.keys(this.map).length, 'slab tiles');
         this.staticMap = [];
+        console.log('World: Starting crawlMap...');
         this.crawlMap(); // Examine map to determine islands, borders, etc
+        console.log('World: Starting createTiles...');
         this.createTiles(); // Create map tiles from grid intersections
+        console.log('World: Starting createBackground...');
         
         this.createBackground();
         
@@ -195,6 +218,12 @@ export default class World extends EventEmitter {
         this.game.renderer.bgCanvas = {
             x: lowestScreenX, y: lowestScreenY, image: bgCanvas.canvas
         };
+        console.log('World: Background canvas created:', {
+            x: lowestScreenX, 
+            y: lowestScreenY, 
+            width: bgCanvas.canvas.width, 
+            height: bgCanvas.canvas.height
+        });
     }
 
     crawlMap(): void {
