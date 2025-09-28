@@ -49,7 +49,7 @@ export default class Tile {
         };
         this.imageName = 'static-tiles';
         
-        // Load sheet synchronously like in the original CommonJS version
+        // Load sheet synchronously, doing with loadSheet caused errors
         this.sheet = new Sheet('tile');
         
         // Get sprite metrics from the loaded sheet
@@ -71,8 +71,6 @@ export default class Tile {
             position: this.position, 
             screen: this.screen
         };
-
-        console.log(`Tile ${this.grid}: Created with screen(${this.screen.x}, ${this.screen.y}) metrics.ox=${this.sprite.metrics.ox} metrics.oy=${this.sprite.metrics.oy}`);
 
         if (this.tileCode == 'G-G-G-G') {
             let variation = util.randomIntRange(0, 2);

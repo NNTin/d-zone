@@ -3,6 +3,7 @@
 import { util } from '../common/util.js';
 import WorldObject from '../engine/worldobject.js';
 import BetterCanvas from '../common/bettercanvas.js';
+import Sheet from './sheet.js';
 
 interface SeedOptions {
     destination: { x: number; y: number; z: number };
@@ -46,28 +47,10 @@ export default class Seed extends WorldObject {
         this.boundGrow = this.grow.bind(this);
         this.boundWither = this.wither.bind(this);
         
-        this.loadSheet();
-    }
-
-    private async loadSheet(): Promise<void> {
-        try {
-            const SheetModule = await import('./sheet.js');
-            this.sheet = new SheetModule.default('seed');
-            if (this.sprite && this.sheet.map) {
-                this.sprite.metrics = this.sheet.map.plant;
-            }
-        } catch (error) {
-            console.error('Failed to load Sheet module:', error);
-            // Fallback metrics
-            this.sheet = { 
-                map: { 
-                    plant: { x: 0, y: 0, w: 12, h: 12, ox: 0, oy: 0 },
-                    orb: { x: 0, y: 0, w: 12, h: 12, ox: 0, oy: 0 }
-                } 
-            };
-            if (this.sprite) {
-                this.sprite.metrics = this.sheet.map.plant;
-            }
+        // Load sheet synchronously, doing with loadSheet caused errors
+        this.sheet = new Sheet('seed');
+        if (this.sprite && this.sheet.map) {
+            this.sprite.metrics = this.sheet.map.plant;
         }
     }
 

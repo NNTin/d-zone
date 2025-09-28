@@ -2,6 +2,7 @@
 
 import WorldObject from '../engine/worldobject.js';
 import BetterCanvas from '../common/bettercanvas.js';
+import Sheet from './sheet.js';
 
 interface BeaconOptions {
     position: { x: number; y: number; z: number };
@@ -27,23 +28,10 @@ export default class Beacon extends WorldObject {
             if (this.exists) canvas.drawEntity(this);
         });
         
-        this.loadSheet();
-    }
-
-    private async loadSheet(): Promise<void> {
-        try {
-            const SheetModule = await import('./sheet.js');
-            this.sheet = new SheetModule.default('beacon');
-            if (this.sprite && this.sheet.map) {
-                this.sprite.metrics = this.sheet.map.main;
-            }
-        } catch (error) {
-            console.error('Failed to load Sheet module:', error);
-            // Fallback metrics
-            this.sheet = { map: { main: { x: 0, y: 0, w: 15, h: 16, ox: 0, oy: 0 } } };
-            if (this.sprite) {
-                this.sprite.metrics = this.sheet.map.main;
-            }
+        // Load sheet synchronously, doing with loadSheet caused errors
+        this.sheet = new Sheet('beacon');
+        if (this.sprite && this.sheet.map) {
+            this.sprite.metrics = this.sheet.map.main;
         }
     }
 
