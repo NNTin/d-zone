@@ -37,33 +37,39 @@ export default class UIElement extends EventEmitter {
         this.elements = [];
         this.w = 1; 
         this.h = 1;
-        if(options.hasOwnProperty('w')) this.w = options.w!; else this.autosize = true;
-        if(options.hasOwnProperty('h')) this.h = options.h!; else this.autosize = true;
-        if(options.hasOwnProperty('top')) this.top = options.top;
-        if(options.hasOwnProperty('bottom')) this.bottom = options.bottom;
-        if(options.hasOwnProperty('left')) this.left = options.left;
-        if(options.hasOwnProperty('right')) this.right = options.right;
+        if(options.w !== undefined) this.w = options.w; else this.autosize = true;
+        if(options.h !== undefined) this.h = options.h; else this.autosize = true;
+        if(options.top !== undefined) this.top = options.top;
+        if(options.bottom !== undefined) this.bottom = options.bottom;
+        if(options.left !== undefined) this.left = options.left;
+        if(options.right !== undefined) this.right = options.right;
         this.canvas = new BetterCanvas(this.w || 1, this.h || 1);
         this.reposition();
     }
 
     reposition(): void {
-        if(this.hasOwnProperty('top')) {
+        // Ensure parent has valid dimensions before positioning
+        if (!this.parent || typeof this.parent.x !== 'number' || typeof this.parent.y !== 'number' ||
+            typeof this.parent.w !== 'number' || typeof this.parent.h !== 'number') {
+            return; // Skip positioning if parent dimensions aren't ready
+        }
+
+        if(this.top !== undefined) {
             if(this.top == 'auto') {
                 this.y = Math.round(this.parent.y + this.parent.h/2 - this.h/2);
             } else {
                 this.y = this.parent.y + (this.top as number);
             }
         }
-        if(this.hasOwnProperty('bottom')) this.y = this.parent.y + this.parent.h - this.h - this.bottom!;
-        if(this.hasOwnProperty('left')) {
+        if(this.bottom !== undefined) this.y = this.parent.y + this.parent.h - this.h - this.bottom;
+        if(this.left !== undefined) {
             if(this.left == 'auto') {
                 this.x = Math.round(this.parent.x + this.parent.w/2 - this.w/2);
             } else {
                 this.x = this.parent.x + (this.left as number);
             }
         }
-        if(this.hasOwnProperty('right')) this.x = this.parent.x + this.parent.w - this.w - this.right!;
+        if(this.right !== undefined) this.x = this.parent.x + this.parent.w - this.w - this.right;
         if(this.elements) {
             for(let i = 0; i < this.elements.length; i++) {
                 this.elements[i].reposition();

@@ -67,6 +67,8 @@ export default class UI extends EventEmitter {
         this.elements = [];
         this.x = 0; 
         this.y = 0;
+        this.w = 1;  // Initialize with default dimensions
+        this.h = 1;  // These will be updated by the first onResize event
         this.canvas = new BetterCanvas(1, 1);
         const self = this;
         this.on('draw', function(canvas: any) { 
