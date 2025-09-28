@@ -201,13 +201,8 @@ export class Canvas extends EventEmitter {
     }
 
     draw(): void {
-        this.canvas.fill(this.backgroundColor);
-        if (this.game.servers) return;
-        this.context.fillStyle = '#d4cfb6';
-        this.context.font = '14px Arial';
-        this.context.textAlign = 'center';
-        this.context.fillText('connecting...', Math.round(this.width / 2), Math.round(this.height / 2 - 4));
-        // Don't return early - allow UI elements to be drawn on top of the connecting message
+        // This method is now simplified - actual rendering logic moved to renderer
+        // Kept for compatibility but actual rendering now happens in renderer.ts
     }
 
     drawStatic(staticCanvas: HTMLCanvasElement): void {

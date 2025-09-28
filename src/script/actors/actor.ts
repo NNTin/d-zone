@@ -42,6 +42,7 @@ export default class Actor extends WorldObject {
     moveTick?: any;
     talkBox?: any;
     talkTimeLeft?: number;
+    frame: number = 0; // Add frame property for animation
 
     constructor(options: ActorOptions) {
         const worldObjectOptions: WorldObjectOptions = {
@@ -58,11 +59,21 @@ export default class Actor extends WorldObject {
         this.nametag = new TextBox(this as any, this.username, true);
         this.nametag.blotText();
         this.sheet = new Sheet('actor');
-        if (this.sprite) this.sprite.image = 'actors';
+        this.frame = 0; // Initialize frame
+        
+        console.log('Actor: Constructor - sprite before assignment:', !!this.sprite);
+        if (this.sprite) {
+            this.sprite.image = 'actors';
+            console.log('Actor: Set sprite image to actors for', this.uid);
+        }
+        
         this.facing = util.pickInObject(geometry.DIRECTIONS);
         this.boundOnMessage = this.onMessage.bind(this);
         this.roleColor = options.roleColor;
+        
+        console.log('Actor: About to call updateSprite in constructor for', this.uid);
         this.updateSprite();
+        console.log('Actor: Constructor completed for', this.uid, 'sprite exists:', !!this.sprite);
     }
 
     onUpdate(): void {
@@ -142,24 +153,93 @@ export default class Actor extends WorldObject {
         if (!this.sprite) return;
         
         let metrics;
-        if (this.presence === 'online') {
-            if (this.destination && this.destination !== true) {
-                // Moving
-                metrics = this.sheet.map.online[this.facing];
-            } else if (this.talking) {
-                // Talking
-                metrics = this.sheet.map.hopping[this.facing];
-            } else {
-                // Standing
-                metrics = this.sheet.map.online[this.facing];
-            }
+        let state: string;
+        let facing = this.facing;
+        
+        // Determine state based on movement and talking
+        if (this.destination) {
+            // Moving - use hopping animation
+            state = 'hopping';
+            console.log('Actor: Moving -', this.uid, 'using hopping state, facing:', facing);
+        } else if (this.talking) {
+            // Talking but not moving - use online state with special facing
+            state = 'online';
+            // Adjust facing for talking animation as per original code
+            facing = facing === 'north' ? 'east' : facing === 'west' ? 'south' : facing;
+            console.log('Actor: Talking -', this.uid, 'using online state, adjusted facing:', facing);
         } else {
-            metrics = this.sheet.map[this.presence] ? this.sheet.map[this.presence][this.facing] : this.sheet.map.offline[this.facing];
+            // Standing - use presence state, but fallback to known states
+            state = this.presence;
+            
+            // Handle unknown presence states by mapping them to known states
+            if (!this.sheet.map[state]) {
+                console.log('Actor: Unknown presence state:', state, 'mapping to fallback');
+                switch (state) {
+                    case 'dnd':
+                    case 'busy':
+                        state = 'idle'; // DND/busy users appear idle
+                        break;
+                    case 'away':
+                    case 'invisible':
+                        state = 'offline'; // Away/invisible users appear offline
+                        break;
+                    default:
+                        state = 'online'; // Default fallback
+                        break;
+                }
+            }
+            
+            console.log('Actor: Standing -', this.uid, 'using presence state:', state, 'facing:', facing);
         }
         
-        if (metrics) {
-            this.sprite.metrics = metrics;
+        // Get base metrics
+        if (!this.sheet.map[state] || !this.sheet.map[state][facing]) {
+            console.error('Actor: No sprite found for state:', state, 'facing:', facing);
+            console.error('Actor: Available states:', Object.keys(this.sheet.map));
+            if (this.sheet.map[state]) {
+                console.error('Actor: Available facings for', state, ':', Object.keys(this.sheet.map[state]));
+            }
+            return;
         }
+        
+        const baseMetrics = this.sheet.map[state][facing];
+        metrics = {
+            x: baseMetrics.x,
+            y: baseMetrics.y,
+            w: baseMetrics.w,
+            h: baseMetrics.h,
+            ox: baseMetrics.ox || 0,
+            oy: baseMetrics.oy || 0
+        };
+        
+        // Apply animations
+        if (this.destination) {
+            // Moving animation: use frame offset
+            if (this.frame !== undefined) {
+                metrics.x += this.frame * metrics.w;
+            }
+        } else if (this.talking) {
+            // Talking animation: animate Y based on game ticks
+            const game = this.game as any;
+            if (game && game.ticks !== undefined) {
+                const animFrame = Math.floor(game.ticks / 4) % 4;
+                metrics.y += animFrame * metrics.h;
+            }
+        }
+        
+        // Apply to sprite
+        this.sprite.metrics = metrics;
+        
+        // Set image - always use 'actors' as the base image
+        // Role colors should be handled in rendering, not in image selection
+        this.sprite.image = 'actors';
+        
+        // Store role color separately for potential rendering effects
+        if (this.roleColor) {
+            this.sprite.roleColor = this.roleColor;
+        }
+        
+        console.log('Actor: Updated sprite for', this.uid, 'final state:', state, 'image:', this.sprite.image, 'roleColor:', this.roleColor);
     }
 
     tryMove(x: number, y: number): any {
@@ -186,21 +266,57 @@ export default class Actor extends WorldObject {
             this.facing = deltaY > 0 ? 'south' : 'north';
         }
         
+        // Initialize frame animation
+        this.frame = 0;
+        
         this.moveTick = this.tickRepeat((progress: any) => {
             if (progress.percent >= 1) {
+                // Movement completed
                 this.position.x = this.destination.x;
                 this.position.y = this.destination.y;
                 this.position.z = this.destination.z;
                 this.destination = false;
+                this.frame = 0; // Reset frame
                 this.zDepth = this.calcZDepth();
                 this.updateScreen();
                 this.preciseScreen = this.toScreenPrecise();
+                this.updateSprite(); // Update sprite when movement ends
                 this.emit('movecomplete');
                 delete this.moveTick;
+                console.log('Actor: Movement completed for', this.uid);
+            } else {
+                // Update animation frame based on progress (simple 4-frame cycle)
+                this.frame = Math.floor(progress.percent * 4) % 4;
+                
+                // Interpolate position during movement
+                const startX = this.position.x;
+                const startY = this.position.y;
+                const startZ = this.position.z;
+                
+                const targetX = this.destination.x;
+                const targetY = this.destination.y;
+                const targetZ = this.destination.z;
+                
+                // Linear interpolation
+                const currentX = startX + (targetX - startX) * progress.percent;
+                const currentY = startY + (targetY - startY) * progress.percent;
+                const currentZ = startZ + (targetZ - startZ) * progress.percent;
+                
+                // Update visual position
+                this.preciseScreen = {
+                    x: (currentX - currentY) * 16 - 8,
+                    y: (currentX + currentY) * 8 - (currentZ) * 16 - 8
+                };
+                
+                // Update sprite every few frames to avoid too much overhead
+                if (Math.floor(progress.percent * 20) % 5 === 0) {
+                    this.updateSprite();
+                }
             }
         }, 20);
         
         this.updateSprite();
+        console.log('Actor: Started movement for', this.uid, 'from', this.position, 'to', this.destination);
     }
 
     move(x: number, y: number, z?: number, absolute?: boolean): void {

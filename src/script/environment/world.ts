@@ -11,6 +11,7 @@ interface Slab {
     position: { x: number; y: number; z: number };
     style: string;
     border?: boolean;
+    height: number;
     addToGame(game: any): void;
     remove(): void;
 }
@@ -463,6 +464,58 @@ export default class World extends EventEmitter {
         } else {
             this.walkable[x + ':' + y] = topObject.position.z + topObject.height;
         }
+    }
+
+    canWalk(x: number, y: number): boolean {
+        // Check if the grid exists in the world map (is there a slab here?)
+        const slab = this.map[x + ':' + y];
+        if (!slab) {
+            console.log('World: canWalk - no slab at:', x + ':' + y);
+            return false;
+        }
+        
+        // Check the walkable status
+        const walkableHeight = this.walkable[x + ':' + y];
+        
+        // If no entry in walkable, it's an empty slab - walkable at slab height
+        // If entry exists, there are objects and the top one is walkable
+        // If entry was deleted due to unWalkable objects, walkableHeight would be undefined
+        // but we still need to check the actual objects to be sure
+        
+        const objects = this.objects[x]?.[y];
+        if (!objects || Object.keys(objects).length === 0) {
+            // Empty slab - always walkable
+            console.log('World: canWalk - empty slab at:', x + ':' + y, 'walkable: true');
+            return true;
+        }
+        
+        // Has objects - check if top object is walkable
+        const zKeys = Object.keys(objects).sort((a, b) => +a - +b);
+        const topObject = objects[+zKeys[zKeys.length - 1]];
+        const canWalk = !topObject.unWalkable;
+        
+        console.log('World: canWalk', x + ':' + y, 'has objects, top object walkable:', canWalk, 'walkableHeight:', walkableHeight);
+        return canWalk;
+    }
+
+    getHeight(x: number, y: number): number {
+        // Return the walkable height at this position
+        const walkableHeight = this.walkable[x + ':' + y];
+        if (walkableHeight !== undefined) {
+            console.log('World: getHeight', x + ':' + y, 'walkable height:', walkableHeight);
+            return walkableHeight;
+        }
+        
+        // If no walkable height (empty slab), return the slab height + slab's height value
+        const slab = this.map[x + ':' + y];
+        if (slab) {
+            const slabTop = slab.position.z + slab.height;
+            console.log('World: getHeight', x + ':' + y, 'slab top height:', slabTop);
+            return slabTop;
+        }
+        
+        console.log('World: getHeight', x + ':' + y, 'no slab, default height: -0.5');
+        return -0.5;
     }
 
     randomEmptyGrid(): string {
