@@ -210,32 +210,16 @@ export class Canvas extends EventEmitter {
     }
 
     drawBG(bgCanvas: BGCanvas): void {
-        console.debug('Canvas: drawBG called with bgCanvas:', bgCanvas);
         if (!bgCanvas || !bgCanvas.image) {
             console.error('Canvas: No bgCanvas or bgCanvas.image');
             return;
         }
-
-        console.debug('Canvas: drawBG - canvas size:', this.width, 'x', this.height);
-        console.debug('Canvas: drawBG - panning:', this.panning.panned);
-        console.debug('Canvas: drawBG - halfWidth/halfHeight:', this.halfWidth, this.halfHeight);
         
         const x = bgCanvas.x + this.halfWidth + this.panning.panned.x;
         const y = bgCanvas.y + this.halfHeight + this.panning.panned.y;
 
-        console.debug('Canvas: drawBG - calculated screen position:', x, y);
-        console.debug('Canvas: drawBG - bgCanvas position:', bgCanvas.x, bgCanvas.y);
-        console.debug('Canvas: drawBG - bgCanvas size:', bgCanvas.image.width, bgCanvas.image.height);
-
         if (x >= this.width || y >= this.height
             || x * -1 >= bgCanvas.image.width || y * -1 >= bgCanvas.image.height) {
-            console.debug('Canvas: drawBG - Background canvas is out of frame, skipping');
-            console.debug('Canvas: drawBG - Out of frame check:', {
-                'x >= width': x >= this.width,
-                'y >= height': y >= this.height,
-                'x * -1 >= bgWidth': x * -1 >= bgCanvas.image.width,
-                'y * -1 >= bgHeight': y * -1 >= bgCanvas.image.height
-            });
             return; // BG canvas is out of frame
         }
         
@@ -264,60 +248,20 @@ export class Canvas extends EventEmitter {
             y: bgEnd.y - bgStart.y
         };
         
-        console.debug('Canvas: drawBG - Drawing params:', {
-            canvasStart, canvasClipped, bgStart, bgEnd, clipped
-        });
-        
-        console.debug('Canvas: drawBG - About to call context.drawImage with:');
-        console.debug('  Source:', bgStart.x, bgStart.y, clipped.x, clipped.y);
-        console.debug('  Dest:', canvasStart.x, canvasStart.y, clipped.x, clipped.y);
-        
         this.context.drawImage(
             bgCanvas.image, bgStart.x, bgStart.y, clipped.x, clipped.y,
             canvasStart.x, canvasStart.y, clipped.x, clipped.y
         );
-        
-        console.debug('Canvas: drawBG - drawImage completed successfully');
     }
 
     drawEntity(sprite: Sprite): void {
         if (!sprite || !sprite.image || sprite.hidden) return;
         if (sprite.position && sprite.position.z > this.game.hideZ) return;
-        
-        // Debug the sprite data to find NaN source
-        console.log('Canvas: drawEntity - sprite data:', {
-            hasSprite: !!sprite,
-            hasScreen: !!sprite.screen,
-            screenX: sprite.screen?.x,
-            screenY: sprite.screen?.y,
-            hasMetrics: !!sprite.metrics,
-            metricsOx: sprite.metrics?.ox,
-            metricsOy: sprite.metrics?.oy,
-            panningPannedX: this.panning.panned.x,
-            panningPannedY: this.panning.panned.y,
-            halfWidth: this.halfWidth,
-            halfHeight: this.halfHeight
-        });
-        
+                
         const screen = {
             x: sprite.screen.x + this.halfWidth + this.panning.panned.x + (sprite.metrics.ox || 0),
             y: sprite.screen.y + this.halfHeight + this.panning.panned.y + (sprite.metrics.oy || 0)
         };
-        
-        console.log('Canvas: drawEntity - calculated screen coords:', {
-            baseX: sprite.screen.x,
-            baseY: sprite.screen.y,
-            halfWidth: this.halfWidth,
-            halfHeight: this.halfHeight,
-            panningX: this.panning.panned.x,
-            panningY: this.panning.panned.y,
-            offsetX: sprite.metrics.ox || 0,
-            offsetY: sprite.metrics.oy || 0,
-            finalX: screen.x,
-            finalY: screen.y,
-            roundedX: Math.round(screen.x),
-            roundedY: Math.round(screen.y)
-        });
         
         if (sprite.keepOnScreen) {
             screen.x = Math.min(this.width - sprite.metrics.w, Math.max(0, screen.x));

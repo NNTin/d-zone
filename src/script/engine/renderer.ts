@@ -37,7 +37,6 @@ export class Renderer extends EventEmitter {
 
         const draw = () => {
             if (self.updateDrawn === false) {
-                console.log('Renderer: Drawing frame, canvases:', self.canvases?.length, 'zBuffer keys:', self.zBufferKeys.length);
                 if (self.canvases) {
                     const timeThis = self.game.timeRenders && (self.game.ticks & 511) === 0;
                     if (timeThis) console.time('render');
@@ -46,27 +45,10 @@ export class Renderer extends EventEmitter {
                         const canvas = self.canvases[c];
                         // Clear canvas first
                         canvas.canvas.fill(canvas.backgroundColor);
-                        console.log('Renderer: Cleared canvas', c, 'with background color:', canvas.backgroundColor);
-                        
-                        // Debug: Log bgCanvas status
-                        if (c === 0) { // Only log for first canvas to avoid spam
-                            console.log('Renderer: About to draw, bgCanvas exists:', !!self.bgCanvas);
-                            if (self.bgCanvas) {
-                                console.log('Renderer: bgCanvas details:', {
-                                    x: self.bgCanvas.x,
-                                    y: self.bgCanvas.y,
-                                    imageWidth: self.bgCanvas.image?.width,
-                                    imageHeight: self.bgCanvas.image?.height
-                                });
-                            }
-                        }
                         
                         // Draw background tiles before entities
                         if (self.bgCanvas) {
                             canvas.drawBG(self.bgCanvas);
-                            console.log('Renderer: Drew background');
-                        } else {
-                            console.log('Renderer: No bgCanvas to draw');
                         }
                         
                         // Draw connecting message if no servers
@@ -75,7 +57,6 @@ export class Renderer extends EventEmitter {
                             canvas.context.font = '14px Arial';
                             canvas.context.textAlign = 'center';
                             canvas.context.fillText('connecting...', Math.round(canvas.width / 2), Math.round(canvas.height / 2 - 4));
-                            console.log('Renderer: Drew connecting message');
                         }
                         
                         // Draw entities
@@ -91,7 +72,6 @@ export class Renderer extends EventEmitter {
                             canvas.drawEntity(self.overlay[o]);
                             entityCount++;
                         }
-                        console.log('Renderer: Drew', entityCount, 'entities');
                         
                         if (self.game.ui) self.game.ui.emit('draw', canvas);
                     }

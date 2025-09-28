@@ -61,19 +61,15 @@ export default class Actor extends WorldObject {
         this.sheet = new Sheet('actor');
         this.frame = 0; // Initialize frame
         
-        console.debug('Actor: Constructor - sprite before assignment:', !!this.sprite);
         if (this.sprite) {
             this.sprite.image = 'actors';
-            console.debug('Actor: Set sprite image to actors for', this.uid);
         }
         
         this.facing = util.pickInObject(geometry.DIRECTIONS);
         this.boundOnMessage = this.onMessage.bind(this);
         this.roleColor = options.roleColor;
         
-        console.debug('Actor: About to call updateSprite in constructor for', this.uid);
         this.updateSprite();
-        console.debug('Actor: Constructor completed for', this.uid, 'sprite exists:', !!this.sprite);
     }
 
     onUpdate(): void {
@@ -98,13 +94,10 @@ export default class Actor extends WorldObject {
     }
 
     addToGame(game: any): void {
-        console.debug('Actor: Adding actor', this.uid, 'to game');
         super.addToGame(game);
         game.on('update', this.onUpdate.bind(this));
         // Initialize default behavior
-        console.debug('Actor: Adding Wander behavior to actor', this.uid);
         this.behaviors.push(new Wander(this));
-        console.debug('Actor: Actor', this.uid, 'now has', this.behaviors.length, 'behaviors');
     }
 
     updatePresence(presence: string): void {
@@ -160,20 +153,17 @@ export default class Actor extends WorldObject {
         if (this.destination) {
             // Moving - use hopping animation
             state = 'hopping';
-            console.debug('Actor: Moving -', this.uid, 'using hopping state, facing:', facing);
         } else if (this.talking) {
             // Talking but not moving - use online state with special facing
             state = 'online';
             // Adjust facing for talking animation as per original code
             facing = facing === 'north' ? 'east' : facing === 'west' ? 'south' : facing;
-            console.debug('Actor: Talking -', this.uid, 'using online state, adjusted facing:', facing);
         } else {
             // Standing - use presence state, but fallback to known states
             state = this.presence;
             
             // Handle unknown presence states by mapping them to known states
             if (!this.sheet.map[state]) {
-                console.debug('Actor: Unknown presence state:', state, 'mapping to fallback');
                 switch (state) {
                     case 'dnd':
                     case 'busy':
@@ -188,8 +178,6 @@ export default class Actor extends WorldObject {
                         break;
                 }
             }
-            
-            console.debug('Actor: Standing -', this.uid, 'using presence state:', state, 'facing:', facing);
         }
         
         // Get base metrics
@@ -238,8 +226,6 @@ export default class Actor extends WorldObject {
         if (this.roleColor) {
             this.sprite.roleColor = this.roleColor;
         }
-        
-        console.debug('Actor: Updated sprite for', this.uid, 'final state:', state, 'image:', this.sprite.image, 'roleColor:', this.roleColor);
     }
 
     tryMove(x: number, y: number): any {
@@ -283,7 +269,6 @@ export default class Actor extends WorldObject {
                 this.updateSprite(); // Update sprite when movement ends
                 this.emit('movecomplete');
                 delete this.moveTick;
-                console.debug('Actor: Movement completed for', this.uid);
             } else {
                 // Update animation frame based on progress (simple 4-frame cycle)
                 this.frame = Math.floor(progress.percent * 4) % 4;
@@ -316,7 +301,6 @@ export default class Actor extends WorldObject {
         }, 20);
         
         this.updateSprite();
-        console.debug('Actor: Started movement for', this.uid, 'from', this.position, 'to', this.destination);
     }
 
     move(x: number, y: number, z?: number, absolute?: boolean): void {

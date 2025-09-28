@@ -71,7 +71,6 @@ export default class Users extends EventEmitter {
         try {
             const ActorModule = await import('./actor.js');
             ActorClass = ActorModule.default;
-            console.debug('✅ Actor class loaded successfully');
         } catch (error) {
             console.error('Failed to load Actor class:', error);
             throw error;
@@ -81,7 +80,6 @@ export default class Users extends EventEmitter {
     async addActor(data: UserData): Promise<void> {
         // Wait for Actor class to load if it hasn't already
         if (!ActorClass && ActorLoadPromise) {
-            console.debug('⏳ Waiting for Actor class to load...');
             await ActorLoadPromise;
         }
 
@@ -90,7 +88,6 @@ export default class Users extends EventEmitter {
             return;
         }
 
-        console.debug('🎭 Creating new actor:', data.username);
         const grid = this.world.randomEmptyGrid();
         const actor = new ActorClass({
             x: +grid.split(':')[0],
@@ -105,7 +102,6 @@ export default class Users extends EventEmitter {
         this.actors[actor.uid] = actor;
         actor.addToGame(this.game);
         actor.updatePresence(data.status);
-        console.debug('✅ Actor created successfully:', data.username);
     }
 
     async updateActor(data: UserData): Promise<void> {

@@ -82,12 +82,9 @@ export default class World extends EventEmitter {
         this.init();
     }
 
-    private async init(): Promise<void> {
-        console.log('World: Starting initialization...');
-        
+    private async init(): Promise<void> {        
         // Load dependencies dynamically
         try {
-            console.log('World: Loading dependencies...');
             
             const [SlabModule, TileModule, TileSheetModule, PathfinderModule] = await Promise.all([
                 import('./slab.js'),
@@ -106,8 +103,6 @@ export default class World extends EventEmitter {
             TileClass = TileModule.default;
             TileSheetClass = TileSheetModule.default;
             PathfinderClass = PathfinderModule.default;
-
-            console.log('World: Classes assigned, starting world generation...');
             this.generateWorld();
         } catch (error) {
             console.error('World: Failed to load world dependencies:', error);
@@ -120,7 +115,6 @@ export default class World extends EventEmitter {
     }
 
     private generateWorld(): void {
-        console.log('World: generateWorld() called');
         geometry.generateClosestGrids(this.worldSize);
         console.log('World: Generated closest grids');
         
@@ -162,11 +156,8 @@ export default class World extends EventEmitter {
         
         console.log('World: Generated', Object.keys(this.map).length, 'slab tiles');
         this.staticMap = [];
-        console.log('World: Starting crawlMap...');
         this.crawlMap(); // Examine map to determine islands, borders, etc
-        console.log('World: Starting createTiles...');
         this.createTiles(); // Create map tiles from grid intersections
-        console.log('World: Starting createBackground...');
         
         this.createBackground();
         
@@ -204,9 +195,6 @@ export default class World extends EventEmitter {
             (highestScreenX - lowestScreenX) + 32 + 1,
             (highestScreenY - lowestScreenY) + 32 + 9
         );
-        
-        console.log('World: createBackground - Created bgCanvas size:', bgCanvas.canvas.width, 'x', bgCanvas.canvas.height);
-        console.log('World: createBackground - About to draw', this.staticMap.length, 'tiles to bgCanvas');
         
         let tilesDrawn = 0;
         for(let j = 0; j < this.staticMap.length; j++) {
@@ -247,7 +235,7 @@ export default class World extends EventEmitter {
             
             const tileImage = this.game.renderer.images[tile.sprite.image];
             if (!tileImage) {
-                console.log('World: createBackground - Missing image for tile:', tile.sprite.image);
+                console.error('World: createBackground - Missing image for tile:', tile.sprite.image);
                 continue;
             }
             
@@ -269,18 +257,9 @@ export default class World extends EventEmitter {
             }
         }
         
-        console.log('World: createBackground - Drew', tilesDrawn, 'tiles to bgCanvas');
-        
         this.game.renderer.bgCanvas = {
             x: lowestScreenX, y: lowestScreenY, image: bgCanvas.canvas
         };
-        console.log('World: Background canvas created and assigned to renderer:', {
-            x: lowestScreenX, 
-            y: lowestScreenY, 
-            width: bgCanvas.canvas.width, 
-            height: bgCanvas.canvas.height,
-            tilesDrawn: tilesDrawn
-        });
     }
 
     crawlMap(): void {
@@ -526,7 +505,6 @@ export default class World extends EventEmitter {
         // Check if the grid exists in the world map (is there a slab here?)
         const slab = this.map[x + ':' + y];
         if (!slab) {
-            console.log('World: canWalk - no slab at:', x + ':' + y);
             return false;
         }
         
@@ -541,7 +519,6 @@ export default class World extends EventEmitter {
         const objects = this.objects[x]?.[y];
         if (!objects || Object.keys(objects).length === 0) {
             // Empty slab - always walkable
-            console.log('World: canWalk - empty slab at:', x + ':' + y, 'walkable: true');
             return true;
         }
         
@@ -549,8 +526,6 @@ export default class World extends EventEmitter {
         const zKeys = Object.keys(objects).sort((a, b) => +a - +b);
         const topObject = objects[+zKeys[zKeys.length - 1]];
         const canWalk = !topObject.unWalkable;
-        
-        console.log('World: canWalk', x + ':' + y, 'has objects, top object walkable:', canWalk, 'walkableHeight:', walkableHeight);
         return canWalk;
     }
 
@@ -558,7 +533,6 @@ export default class World extends EventEmitter {
         // Return the walkable height at this position
         const walkableHeight = this.walkable[x + ':' + y];
         if (walkableHeight !== undefined) {
-            console.log('World: getHeight', x + ':' + y, 'walkable height:', walkableHeight);
             return walkableHeight;
         }
         
@@ -566,11 +540,8 @@ export default class World extends EventEmitter {
         const slab = this.map[x + ':' + y];
         if (slab) {
             const slabTop = slab.position.z + slab.height;
-            console.log('World: getHeight', x + ':' + y, 'slab top height:', slabTop);
             return slabTop;
         }
-        
-        console.log('World: getHeight', x + ':' + y, 'no slab, default height: -0.5');
         return -0.5;
     }
 
