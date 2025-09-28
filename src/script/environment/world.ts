@@ -181,6 +181,8 @@ export default class World extends EventEmitter {
     }
 
     private createBackground(): void {
+        console.log('World: createBackground - Starting with', this.staticMap.length, 'tiles');
+        
         let lowestScreenX = 0, lowestScreenY = 0, highestScreenX = 0, highestScreenY = 0;
         
         for(let i = 0; i < this.staticMap.length; i++) {
@@ -194,36 +196,90 @@ export default class World extends EventEmitter {
             highestScreenY = highestScreenY > preScreen.y ? highestScreenY : preScreen.y;
         }
         
+        console.log('World: createBackground - Screen bounds:', {
+            lowestScreenX, lowestScreenY, highestScreenX, highestScreenY
+        });
+        
         const bgCanvas = new BetterCanvas(
             (highestScreenX - lowestScreenX) + 32 + 1,
             (highestScreenY - lowestScreenY) + 32 + 9
         );
         
+        console.log('World: createBackground - Created bgCanvas size:', bgCanvas.canvas.width, 'x', bgCanvas.canvas.height);
+        console.log('World: createBackground - About to draw', this.staticMap.length, 'tiles to bgCanvas');
+        
+        let tilesDrawn = 0;
         for(let j = 0; j < this.staticMap.length; j++) {
             const tile = this.staticMap[j];
             const screen = { x: tile.screen.x, y: tile.screen.y };
+            
+            // Debug: Log tile data for the first few tiles or any with NaN values
+            const hasNaN = !isFinite(tile.screen.x) || !isFinite(tile.screen.y) || 
+                          !isFinite(tile.sprite.metrics.ox || 0) || !isFinite(tile.sprite.metrics.oy || 0);
+            
+            if (j < 3 || hasNaN) {
+                console.log(`World: createBackground - Tile ${j} data:`, {
+                    'tile.screen': tile.screen,
+                    'tile.sprite': tile.sprite,
+                    'tile.sprite.metrics': tile.sprite.metrics,
+                    'screen before offset': { x: screen.x, y: screen.y },
+                    'hasNaN': hasNaN
+                });
+            }
+            
             screen.x += tile.sprite.metrics.ox || 0;
             screen.y += tile.sprite.metrics.oy || 0;
             screen.x -= lowestScreenX;
             screen.y -= lowestScreenY;
             
+            // Check for NaN after calculations
+            if (!isFinite(screen.x) || !isFinite(screen.y)) {
+                console.error(`World: createBackground - NaN detected for tile ${j}:`, {
+                    'original tile.screen': { x: tile.screen.x, y: tile.screen.y },
+                    'tile.sprite.metrics.ox': tile.sprite.metrics.ox,
+                    'tile.sprite.metrics.oy': tile.sprite.metrics.oy,
+                    'lowestScreenX': lowestScreenX,
+                    'lowestScreenY': lowestScreenY,
+                    'final screen': screen
+                });
+                continue; // Skip this tile
+            }
+            
+            const tileImage = this.game.renderer.images[tile.sprite.image];
+            if (!tileImage) {
+                console.log('World: createBackground - Missing image for tile:', tile.sprite.image);
+                continue;
+            }
+            
             bgCanvas.drawImage(
-                this.game.renderer.images[tile.sprite.image],
+                tileImage,
                 tile.sprite.metrics.x, tile.sprite.metrics.y,
                 tile.sprite.metrics.w, tile.sprite.metrics.h,
                 Math.round(screen.x), Math.round(screen.y),
                 tile.sprite.metrics.w, tile.sprite.metrics.h
             );
+            tilesDrawn++;
+            
+            if (j < 5) { // Log first few tiles for debugging
+                console.log('World: createBackground - Drew tile', j, ':', {
+                    image: tile.sprite.image,
+                    sourceRect: `${tile.sprite.metrics.x},${tile.sprite.metrics.y} ${tile.sprite.metrics.w}x${tile.sprite.metrics.h}`,
+                    destPos: `${Math.round(screen.x)},${Math.round(screen.y)}`
+                });
+            }
         }
+        
+        console.log('World: createBackground - Drew', tilesDrawn, 'tiles to bgCanvas');
         
         this.game.renderer.bgCanvas = {
             x: lowestScreenX, y: lowestScreenY, image: bgCanvas.canvas
         };
-        console.log('World: Background canvas created:', {
+        console.log('World: Background canvas created and assigned to renderer:', {
             x: lowestScreenX, 
             y: lowestScreenY, 
             width: bgCanvas.canvas.width, 
-            height: bgCanvas.canvas.height
+            height: bgCanvas.canvas.height,
+            tilesDrawn: tilesDrawn
         });
     }
 

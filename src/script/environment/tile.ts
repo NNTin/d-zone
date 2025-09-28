@@ -1,6 +1,7 @@
 'use strict';
 
 import { util } from '../common/util.js';
+import Sheet from './sheet2.js';
 
 interface TileOptions {
     game: any;
@@ -48,21 +49,30 @@ export default class Tile {
         };
         this.imageName = 'static-tiles';
         
-        // We'll use dynamic import for Sheet since it's not converted yet
-        this.sheet = { map: {} }; // placeholder
-        this.loadSheet();
+        // Load sheet synchronously like in the original CommonJS version
+        this.sheet = new Sheet('tile');
         
-        const spriteMap = this.sheet.map[this.tileCode] || { x: 0, y: 0, w: 16, h: 16, ox: 0, oy: 0 };
+        // Get sprite metrics from the loaded sheet
+        const spriteMap = this.sheet.map[this.tileCode] || { 
+            x: 0, y: 0, w: 16, h: 16, ox: 0, oy: 0 
+        };
+        
+        // Ensure ox and oy are numbers, not undefined
         this.sprite = {
             metrics: {
-                x: spriteMap.x, y: spriteMap.y,
-                w: spriteMap.w, h: spriteMap.h,
-                ox: spriteMap.ox, oy: spriteMap.oy
+                x: spriteMap.x || 0,
+                y: spriteMap.y || 0,
+                w: spriteMap.w || 16,
+                h: spriteMap.h || 16,
+                ox: spriteMap.ox || 0,
+                oy: spriteMap.oy || 0
             },
             image: this.imageName, 
             position: this.position, 
             screen: this.screen
         };
+
+        console.log(`Tile ${this.grid}: Created with screen(${this.screen.x}, ${this.screen.y}) metrics.ox=${this.sprite.metrics.ox} metrics.oy=${this.sprite.metrics.oy}`);
 
         if (this.tileCode == 'G-G-G-G') {
             let variation = util.randomIntRange(0, 2);
@@ -74,12 +84,4 @@ export default class Tile {
         }
     }
 
-    private async loadSheet(): Promise<void> {
-        try {
-            const SheetModule = await import('./sheet2.js');
-            this.sheet = new SheetModule.default('tile');
-        } catch (error) {
-            console.error('Failed to load Sheet module:', error);
-        }
-    }
 }

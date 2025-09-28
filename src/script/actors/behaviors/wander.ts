@@ -11,7 +11,7 @@ export default class Wander {
     impulseBound: () => void;
 
     constructor(actor: any) {
-        console.log('Wander: Creating behavior for actor', actor.uid);
+        console.debug('Wander: Creating behavior for actor', actor.uid);
         this.actor = actor;
         this.impulseCompleteBound = this.impulseComplete.bind(this);
         this.impulseBound = this.impulse.bind(this);
@@ -20,28 +20,28 @@ export default class Wander {
 
     wait(): void {
         if (!this.actor) return;
-        console.log('Wander: Scheduling next impulse for actor', this.actor.uid);
+        console.debug('Wander: Scheduling next impulse for actor', this.actor.uid);
         this.actor.tickDelay(this.impulseBound, 20 + Math.round(Math.random() * this.impulseInterval));
     }
 
     impulse(): void {
-        console.log('Wander: impulse() called for actor', this.actor?.uid, 'presence:', this.actor?.presence);
+        console.debug('Wander: impulse() called for actor', this.actor?.uid, 'presence:', this.actor?.presence);
         if (!this.actor || this.actor.presence != 'online') return;
         if (this.actor.destination) { // Busy
-            console.log('Wander: Actor busy, waiting...');
+            console.debug('Wander: Actor busy, waiting...');
             this.wait();
         } else {
             const direction = util.pickInObject(geometry.DIRECTIONS);
             //direction = util.pickInArray(['east','south']);
             const moveXY = geometry.DIRECTIONS[direction];
             const canMove = this.actor.tryMove(moveXY.x, moveXY.y);
-            console.log('Wander: Trying to move', direction, 'canMove:', canMove);
+            console.debug('Wander: Trying to move', direction, 'canMove:', canMove);
             if (canMove) {
                 this.actor.destination = canMove;
                 this.actor.startMove();
                 this.actor.once('movecomplete', this.impulseCompleteBound);
             } else {
-                console.log('Wander: Cannot move, waiting...');
+                console.debug('Wander: Cannot move, waiting...');
                 this.wait();
             }
         }
