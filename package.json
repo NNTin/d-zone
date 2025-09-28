@@ -30,7 +30,8 @@
     "watch": "esbuild src/main.ts --bundle --sourcemap --outfile=dist/static/bundle.js --format=iife --platform=browser --target=es2020 --define:global=window --external:fs --external:path --watch",
     "type-check": "tsc --noEmit",
     "prestart": "npm run build:prod",
-    "start": "ts-node --esm index.ts",
+    "start": "node server.mjs",
+    "start:ts": "ts-node --esm index.ts",
     "dev": "concurrently \"npm run watch\" \"npm start\""
   },
   "repository": {
