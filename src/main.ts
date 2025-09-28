@@ -297,7 +297,7 @@ function addHelpButton(): void {
 
 function initWebsocket(): void {
     // Initialize the game components now that they're properly imported
-    let users: Users | undefined, world: World | undefined, decorator: Decorator | undefined;
+    let users: Users, world: World | undefined, decorator: Decorator | undefined;
 
     // Function to clean up event listeners and prevent memory leaks
     function cleanupEventListeners(): void {
@@ -475,7 +475,7 @@ function initWebsocket(): void {
                 //console.log('Initializing actors',data.data);
                 const userCount = Object.keys(userList).length;
                 game.setMaxListeners(userCount + 100);
-                if (users) users.setMaxListeners(userCount + 50);
+                users.setMaxListeners(userCount + 50);
                 // Set max listeners for world and decorator to prevent memory leaks
                 if (world && world.setMaxListeners) world.setMaxListeners(userCount + 50);
                 if (decorator && decorator.setMaxListeners) decorator.setMaxListeners(userCount + 50);
@@ -485,15 +485,15 @@ function initWebsocket(): void {
                     //if(uid != '86913608335773696') continue;
                     //if(data.data[uid].status != 'online') continue;
                     if (!userList[uid].username) continue;
-                    if (users) users.addActor(userList[uid]);
+                    if (users) users.addActor(userList[uid]); // Fire and forget async call
                     //break;
                 }
                 console.log((users ? Object.keys(users.actors).length : 0).toString()+' actors created');
                 game.renderer.canvases[0].onResize();
             } else if (data.type === 'presence') { // User status update
-                if (users) users.updateActor(data.data);
+                if (users) users.updateActor(data.data); // Fire and forget async call
             } else if (data.type === 'message') { // Chatter
-                if (users) users.queueMessage(data.data);
+                users.queueMessage(data.data);
             } else if (data.type === 'error') {
                 (window as any).alert(data.data.message);
                 if (!game.world) joinServer({id: 'default'});

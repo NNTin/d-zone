@@ -45,6 +45,7 @@ interface Game {
 }
 
 let ActorClass: any;
+let ActorLoadPromise: Promise<void> | null = null;
 
 export default class Users extends EventEmitter {
     game: Game;
@@ -62,25 +63,34 @@ export default class Users extends EventEmitter {
         this.actors = {};
         this.messageQueue = {};
         
-        this.loadActor();
+        // Start loading the Actor class immediately
+        ActorLoadPromise = this.loadActor();
     }
 
     private async loadActor(): Promise<void> {
         try {
             const ActorModule = await import('./actor.js');
             ActorClass = ActorModule.default;
+            console.log('✅ Actor class loaded successfully');
         } catch (error) {
             console.error('Failed to load Actor class:', error);
             throw error;
         }
     }
 
-    addActor(data: UserData): void {
+    async addActor(data: UserData): Promise<void> {
+        // Wait for Actor class to load if it hasn't already
+        if (!ActorClass && ActorLoadPromise) {
+            console.log('⏳ Waiting for Actor class to load...');
+            await ActorLoadPromise;
+        }
+
         if (!ActorClass) {
-            console.error('Actor class not loaded yet');
+            console.error('❌ Actor class not loaded yet');
             return;
         }
 
+        console.log('🎭 Creating new actor:', data.username);
         const grid = this.world.randomEmptyGrid();
         const actor = new ActorClass({
             x: +grid.split(':')[0],
@@ -95,9 +105,10 @@ export default class Users extends EventEmitter {
         this.actors[actor.uid] = actor;
         actor.addToGame(this.game);
         actor.updatePresence(data.status);
+        console.log('✅ Actor created successfully:', data.username);
     }
 
-    updateActor(data: UserData): void {
+    async updateActor(data: UserData): Promise<void> {
         const actor = this.actors[data.uid];
         if(actor) {
             if(data.delete) {
@@ -107,7 +118,7 @@ export default class Users extends EventEmitter {
                 actor.updatePresence(data.status);
             }
         } else {
-            this.addActor(data);
+            await this.addActor(data);
         }
     }
 
