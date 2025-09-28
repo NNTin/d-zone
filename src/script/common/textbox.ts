@@ -26,6 +26,7 @@ interface TextBoxSprite {
     stay: boolean;
     metrics: { x: number; y: number; w: number; h: number };
     image?: HTMLCanvasElement;
+    hidden?: boolean;
 }
 
 function cleanString(text: string): string {

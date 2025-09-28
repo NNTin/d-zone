@@ -43,6 +43,8 @@ export default class Actor extends WorldObject {
     talkBox?: any;
     talkTimeLeft?: number;
     frame: number = 0; // Add frame property for animation
+    lastMessage?: { channel?: string; time: number };
+    messageBox?: TextBox;
 
     constructor(options: ActorOptions) {
         const worldObjectOptions: WorldObjectOptions = {
@@ -320,36 +322,24 @@ export default class Actor extends WorldObject {
 
     startTalking(message: any, channel?: string, onStop?: () => void): void {
         this.talking = true;
+        this.lastMessage = { channel, time: Date.now() };
+        this.nametag.sprite.hidden = true;
+        this.messageBox = new TextBox(this as any, message, true);
+        this.messageBox.addToGame(this.game);
         
-        // Handle both string messages and object messages with content property
-        const messageText = typeof message === 'string' ? message : (message.content || message.message || '');
-        this.talkTimeLeft = Math.max(60, messageText.length * 4);
-        
-        if (this.talkBox) {
-            this.talkBox.remove();
-        }
-        
-        this.talkBox = (this.game as any).ui.addLabel({
-            text: messageText,
-            screen: { x: this.preciseScreen.x, y: this.preciseScreen.y - 20 },
-            maxWidth: 200,
-            backgroundColor: '#000000',
-            color: '#ffffff',
-            padding: 2
+        const self = this;
+        this.messageBox.scrollMessage(function() {
+            delete self.messageBox;
+            self.talking = false;
+            self.nametag.sprite.hidden = false;
+            self.updateSprite();
+            self.emit('donetalking');
+            //if(!self.lastSeed || self.game.ticks - self.lastSeed > 60*60) {
+            //    self.lastSeed = self.game.ticks;
+            //    self.game.decorator.sewSeed({ origin: self.position });
+            //}
+            if (onStop) onStop();
         });
-        
-        const talkTick = this.tickRepeat((progress: any) => {
-            this.talkTimeLeft!--;
-            if (this.talkTimeLeft! <= 0) {
-                this.talking = false;
-                if (this.talkBox) {
-                    this.talkBox.remove();
-                    delete this.talkBox;
-                }
-                if (onStop) onStop();
-                this.updateSprite();
-            }
-        }, 1);
     }
 
     onMessage(message: any): void {
@@ -394,7 +384,13 @@ export default class Actor extends WorldObject {
         }
         this.behaviors = [];
         
-        // Clean up talk box
+        // Clean up message box
+        if (this.messageBox) {
+            this.messageBox.remove();
+            delete this.messageBox;
+        }
+        
+        // Clean up talk box (legacy)
         if (this.talkBox) {
             this.talkBox.remove();
             delete this.talkBox;

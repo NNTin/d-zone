@@ -46,7 +46,15 @@ export default class Entity extends EventEmitter {
     addToGame(game: Game): void {
         this.game = game;
         this.game.entities.push(this);
-        if(this.hasOwnProperty('position')) {
+        
+        console.log('Entity.addToGame:', {
+            entityType: this.constructor.name,
+            hasOwnPropertyPosition: this.hasOwnProperty('position'),
+            positionValue: this.position,
+            positionUndefined: this.position === undefined
+        });
+        
+        if(this.hasOwnProperty('position') && this.position !== undefined) {
             this.game.world.addToWorld(this);
             if(!this.invisible) this.game.renderer.addToZBuffer(this.sprite, this.zDepth);
         } else {
