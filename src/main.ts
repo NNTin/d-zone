@@ -7,6 +7,9 @@ import DiscordOAuth from './script/auth/discord-oauth.js';
 import Renderer from './script/engine/renderer.js';
 import Canvas from './script/engine/canvas.js';
 import UI from './script/ui/ui.js';
+import World from './script/environment/world.js';
+import Users from './script/actors/users.js';
+import Decorator from './script/props/decorator.js';
 
 // Import package.json for version information
 // @ts-ignore - esbuild will handle this
@@ -293,11 +296,8 @@ function addHelpButton(): void {
 }
 
 function initWebsocket(): void {
-    // TODO: Convert these to ESM imports after converting JS files to TS
-    // const World = require('./script/environment/world.js');
-    // const Users = require('./script/actors/users.js');
-    // const Decorator = require('./script/props/decorator.js');
-    let users: any, world: any, decorator: any;
+    // Initialize the game components now that they're properly imported
+    let users: Users | undefined, world: World | undefined, decorator: Decorator | undefined;
 
     // Function to clean up event listeners and prevent memory leaks
     function cleanupEventListeners(): void {
@@ -459,11 +459,11 @@ function initWebsocket(): void {
                 const userList = data.data.users;
                 game.server = requestServer;
                 
-                // TODO: Uncomment after converting JS files to TS
-                // world = new World(game, Math.round(3.3 * Math.sqrt(Object.keys(userList).length)));
-                // decorator = new Decorator(game, world);
-                // game.decorator = decorator;
-                // users = new Users(game, world);
+                // Initialize the game components now that they're properly converted to TS
+                world = new World(game as any, Math.round(3.3 * Math.sqrt(Object.keys(userList).length)));
+                decorator = new Decorator(game as any, world as any);
+                game.decorator = decorator;
+                users = new Users(game as any, world as any);
                 
                 const params = '?s=' + data.data.request.server;
                 if (window.location.protocol !== 'file:') {
@@ -475,7 +475,7 @@ function initWebsocket(): void {
                 //console.log('Initializing actors',data.data);
                 const userCount = Object.keys(userList).length;
                 game.setMaxListeners(userCount + 100);
-                users.setMaxListeners(userCount + 50);
+                if (users) users.setMaxListeners(userCount + 50);
                 // Set max listeners for world and decorator to prevent memory leaks
                 if (world && world.setMaxListeners) world.setMaxListeners(userCount + 50);
                 if (decorator && decorator.setMaxListeners) decorator.setMaxListeners(userCount + 50);
@@ -485,15 +485,15 @@ function initWebsocket(): void {
                     //if(uid != '86913608335773696') continue;
                     //if(data.data[uid].status != 'online') continue;
                     if (!userList[uid].username) continue;
-                    users.addActor(userList[uid]);
+                    if (users) users.addActor(userList[uid]);
                     //break;
                 }
-                console.log((Object.keys(users.actors).length).toString()+' actors created');
+                console.log((users ? Object.keys(users.actors).length : 0).toString()+' actors created');
                 game.renderer.canvases[0].onResize();
             } else if (data.type === 'presence') { // User status update
-                users.updateActor(data.data);
+                if (users) users.updateActor(data.data);
             } else if (data.type === 'message') { // Chatter
-                users.queueMessage(data.data);
+                if (users) users.queueMessage(data.data);
             } else if (data.type === 'error') {
                 (window as any).alert(data.data.message);
                 if (!game.world) joinServer({id: 'default'});
