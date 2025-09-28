@@ -1,6 +1,39 @@
 'use strict';
 
-var map = {
+interface SpriteMetrics {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    ox: number;
+    oy: number;
+}
+
+interface AnimatedSpriteMetrics extends SpriteMetrics {
+    animation?: {
+        frames: number;
+        zStartFrame: number;
+    };
+}
+
+interface ActorSpriteMap {
+    north: SpriteMetrics | AnimatedSpriteMetrics;
+    south: SpriteMetrics | AnimatedSpriteMetrics;
+    east: SpriteMetrics | AnimatedSpriteMetrics;
+    west: SpriteMetrics | AnimatedSpriteMetrics;
+    animation?: {
+        frames: number;
+        zStartFrame: number;
+    };
+}
+
+interface SheetMap {
+    [spriteName: string]: {
+        [state: string]: ActorSpriteMap;
+    };
+}
+
+const map: SheetMap = {
     actor: {
         online: {
             north: { x: 28, y: 0, w: 14, h: 14, ox: 0, oy: 5 },
@@ -30,8 +63,10 @@ var map = {
     }
 };
 
-module.exports = Sheet;
+export default class Sheet {
+    map: any;
 
-function Sheet(spriteName) {
-    this.map = JSON.parse(JSON.stringify(map[spriteName]));
+    constructor(spriteName: string) {
+        this.map = JSON.parse(JSON.stringify(map[spriteName]));
+    }
 }
