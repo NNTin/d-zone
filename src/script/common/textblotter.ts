@@ -1,7 +1,67 @@
 'use strict';
-var BetterCanvas = require('./../common/bettercanvas.js');
 
-var charSets = {
+import BetterCanvas from './bettercanvas.js';
+
+interface CharInfo {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    char: string;
+    oy?: number;
+}
+
+interface CharSet {
+    y: number;
+    height: number;
+    xSpacing?: number;
+    oy?: number;
+    count?: number;
+    chars: Array<[string, number]>;
+}
+
+interface CharMap {
+    x: number;
+    char: CharInfo;
+    w: number;
+    oy?: number;
+}
+
+interface LineInfo {
+    w: number;
+    chars: CharMap[];
+}
+
+interface TextMetrics {
+    lines: LineInfo[];
+    text: string;
+    w: number;
+}
+
+interface BlotOptions {
+    text: string;
+    x?: number;
+    y?: number;
+    maxWidth?: number;
+    maxChars?: number;
+    lineStart?: number;
+    lineCount?: number;
+    canvas?: BetterCanvas;
+    bg?: string;
+    metrics?: TextMetrics;
+}
+
+interface TransitionOptions {
+    progress: number;
+    bg: string;
+    canvas?: BetterCanvas;
+    lineCount?: number;
+    metrics?: TextMetrics;
+    text?: string;
+    maxWidth?: number;
+}
+
+const charSets: Record<string, CharSet> = {
     upper: { y: 0, height: 8, xSpacing: 1, chars: [
         ['A',5], ['B',5], ['C',5], ['D',5], ['E',4], ['F',4], ['G',5], ['H',5], ['I',3], ['J',5],
         ['K',5], ['L',4], ['M',5], ['N',5], ['O',5], ['P',5], ['Q',5], ['R',5], ['S',5], ['T',5],
@@ -33,40 +93,54 @@ var charSets = {
     ] }
 };
 
-var fontMap = {};
+const fontMap: Record<string, CharInfo> = {};
 
-for(var csKey in charSets) { if(!charSets.hasOwnProperty(csKey)) continue;
-    var charSet = charSets[csKey], rx = 0;
-    for(var c = 0; c < charSet.chars.length; c++) {
-        var char = charSet.chars[c][0], width = charSet.chars[c][1]+(charSet.xSpacing || 0);
-        fontMap[char] = { x: rx, y: charSet.y, w: width, h: charSet.height, char: char, oy: charSet.oy };
+for(const csKey in charSets) { 
+    if(!charSets.hasOwnProperty(csKey)) continue;
+    const charSet = charSets[csKey];
+    let rx = 0;
+    for(let c = 0; c < charSet.chars.length; c++) {
+        const char = charSet.chars[c][0];
+        const width = charSet.chars[c][1] + (charSet.xSpacing || 0);
+        fontMap[char] = { 
+            x: rx, 
+            y: charSet.y, 
+            w: width, 
+            h: charSet.height, 
+            char: char, 
+            oy: charSet.oy 
+        };
         rx += width;
     }
 }
-var padding = { x: 4, y: 3 };
-var vertOffset = 1;
-var image;
 
-module.exports = {
-    loadImage: function(img) { image = img; },
-    blot: function(options) {
-        var x = options.x || 0, y = options.y || 0;
-        var metrics = options.metrics || this.calculateMetrics(options);
-        var lineStart = options.lineStart ? options.lineStart : 0;
-        var lineCount = options.lineCount ? Math.min(metrics.lines.length, options.lineCount) 
+const padding = { x: 4, y: 3 };
+const vertOffset = 1;
+let image: HTMLImageElement | HTMLCanvasElement;
+
+export const TextBlotter = {
+    loadImage: function(img: HTMLImageElement | HTMLCanvasElement): void { 
+        image = img; 
+    },
+    blot: function(options: BlotOptions): HTMLCanvasElement {
+        const x = options.x || 0;
+        const y = options.y || 0;
+        const metrics = options.metrics || this.calculateMetrics(options);
+        const lineStart = options.lineStart ? options.lineStart : 0;
+        const lineCount = options.lineCount ? Math.min(metrics.lines.length, options.lineCount) 
             : metrics.lines.length;
-        var canvas = options.canvas || new BetterCanvas(
+        const canvas = options.canvas || new BetterCanvas(
                 padding.x * 2 + x + metrics.w - 1,
                 padding.y * 2 + y + lineCount * 10
             );
         if(options.bg) canvas.fill(options.bg);
-        var charCount = 0;
-        for(var l = lineStart; l < Math.min(metrics.lines.length, lineStart + lineCount); l++) {
-            var maxChars = metrics.lines[l].chars.length;
-            if(options.maxChars) maxChars = Math.min(maxChars,options.maxChars - charCount);
-            for(var c = 0; c < maxChars; c++) {
-                var char = metrics.lines[l].chars[c];
-                if(char.char.text == ' ') continue;
+        let charCount = 0;
+        for(let l = lineStart; l < Math.min(metrics.lines.length, lineStart + lineCount); l++) {
+            let maxChars = metrics.lines[l].chars.length;
+            if(options.maxChars) maxChars = Math.min(maxChars, options.maxChars - charCount);
+            for(let c = 0; c < maxChars; c++) {
+                const char = metrics.lines[l].chars[c];
+                if(char.char.char == ' ') continue;
                 canvas.drawImage(image, char.char.x, char.char.y, char.w, char.char.h,
                     padding.x + x + char.x, padding.y + y + (l - lineStart) * 10 + (char.oy || 0) + vertOffset, 
                     char.w, char.char.h);
@@ -75,30 +149,34 @@ module.exports = {
         }
         return canvas.canvas;
     },
-    transition: function(options) {
-        var metrics = options.metrics || this.calculateMetrics(options);
-        var canvas = options.canvas || new BetterCanvas(
+    transition: function(options: TransitionOptions): HTMLCanvasElement {
+        const metrics = options.metrics || (options.text ? this.calculateMetrics(options as BlotOptions) : { lines: [], text: '', w: 0 });
+        const canvas = options.canvas || new BetterCanvas(
                 metrics.w + padding.x * 2, 
                 (options.lineCount || metrics.lines.length) * 10 + padding.y * 2
             );
-        var fillWidth = Math.max(2,Math.max(0, options.progress - 0.25) / 0.75 * canvas.canvas.width);
-        var fillHeight = Math.min(1, options.progress * 4) * canvas.canvas.height * -1;
+        const fillWidth = Math.max(2, Math.max(0, options.progress - 0.25) / 0.75 * canvas.canvas.width);
+        const fillHeight = Math.min(1, options.progress * 4) * canvas.canvas.height * -1;
         canvas.fillRect(options.bg, (canvas.canvas.width - fillWidth) / 2, canvas.canvas.height, 
             fillWidth, fillHeight);
         return canvas.canvas;
     },
-    calculateMetrics: function(options) {
+    calculateMetrics: function(options: BlotOptions): TextMetrics {
         // TODO: Normalize line lengths so there are no single-word remainders
-        var text = options.text;
-        var lines = [];
-        var words = text.split(' ');
-        var space = fontMap[' '];
-        var lineWidth = 0, lineChars = [], maxLineWidth = 0;
-        for(var w = 0; w < words.length; w++) {
-            var word = words[w];
+        const text = options.text;
+        const lines: LineInfo[] = [];
+        const words = text.split(' ');
+        const space = fontMap[' '];
+        let lineWidth = 0;
+        let lineChars: CharMap[] = [];
+        let maxLineWidth = 0;
+        
+        for(let w = 0; w < words.length; w++) {
+            const word = words[w];
             if(word == '') continue; // Skip empty words
-            var wordWidth = 0;
-            var wordChars = [];
+            let wordWidth = 0;
+            let wordChars: CharMap[] = [];
+            
             if(lineChars.length > 0) { // Add space before word unless starting a line
                 wordChars.push({ x: lineWidth, char: space, w: space.w });
                 wordWidth += space.w;
@@ -109,8 +187,8 @@ module.exports = {
                 });
                 wordWidth += fontMap[word].w;
             } else {
-                for(var a = 0; a < word.length; a++) {
-                    var ltr = fontMap[word[a]] || space;
+                for(let a = 0; a < word.length; a++) {
+                    const ltr = fontMap[word[a]] || space;
                     wordChars.push({ 
                         x: lineWidth + wordWidth, char: ltr, w: ltr.w, oy: ltr.oy 
                     });
@@ -122,19 +200,20 @@ module.exports = {
                     if(lineWidth > 0) {
                         lines.push({ w: lineWidth, chars: lineChars });
                         maxLineWidth = Math.max(lineWidth, maxLineWidth);
-                        lineWidth = 0; lineChars = [];
+                        lineWidth = 0; 
+                        lineChars = [];
                     }
                     wordChars = [];
                     wordWidth = 0;
-                    for(var b = 0; b < word.length; b++) {
-                        var ltrB = fontMap[word[b]] || space;
+                    for(let b = 0; b < word.length; b++) {
+                        const ltrB = fontMap[word[b]] || space;
                         if(lineWidth + wordWidth + ltrB.w < options.maxWidth) {
                             wordChars.push({ 
                                 x: lineWidth + wordWidth, char: ltrB, w: ltrB.w, oy: ltrB.oy 
                             });
                             wordWidth += ltrB.w;
                         } else {
-                            var trimWidth = (lineWidth + wordWidth + ltrB.w) - options.maxWidth;
+                            const trimWidth = (lineWidth + wordWidth + ltrB.w) - options.maxWidth;
                             wordChars.push({ 
                                 x: lineWidth + wordWidth, char: ltrB, w: ltrB.w - trimWidth, oy: ltrB.oy 
                             });
@@ -149,7 +228,8 @@ module.exports = {
                 }
                 lines.push({ w: lineWidth, chars: lineChars });
                 maxLineWidth = Math.max(lineWidth, maxLineWidth);
-                lineWidth = 0; lineChars = [];
+                lineWidth = 0; 
+                lineChars = [];
             } else { // Word fits on line
                 lineWidth += wordWidth;
                 lineChars = lineChars.concat(wordChars);

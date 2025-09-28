@@ -4,6 +4,9 @@ import { util } from './script/common/util.js';
 import Preloader from './script/engine/preloader.js';
 import Game from './script/engine/game.js';
 import DiscordOAuth from './script/auth/discord-oauth.js';
+import Renderer from './script/engine/renderer.js';
+import Canvas from './script/engine/canvas.js';
+import UI from './script/ui/ui.js';
 
 // Import package.json for version information
 // @ts-ignore - esbuild will handle this
@@ -22,17 +25,19 @@ version = packageInfo.version;
 preloader = new Preloader(initGame);
 
 function initGame(images: Record<string, HTMLCanvasElement>): void {
-    // Import the converted TypeScript modules
-    const Renderer = require('./script/engine/renderer.ts');
-    const Canvas = require('./script/engine/canvas.ts');
-    const UI = require('./script/ui/ui.js');
+    // Use direct imports since these modules will be available  
+    // We'll fix these imports after converting the JS files to TS
+    console.log('Initializing game with images:', Object.keys(images));
     
     game = new Game({ step: 1000 / 60 });
     game.renderer = new Renderer({ game: game, images: images });
     const canvas = new Canvas({ id: 'main', game: game, initialScale: 2, backgroundColor: '#181213' });
     game.renderer.addCanvas(canvas);
     game.bindCanvas(canvas);
-    game.ui = new UI(game);
+    
+    // Initialize UI (converted to TypeScript)
+    game.ui = new UI(game as any);
+    
     //game.showGrid = true;
     //game.timeRenders = true;
     
@@ -288,9 +293,10 @@ function addHelpButton(): void {
 }
 
 function initWebsocket(): void {
-    const World = require('./script/environment/world.js');
-    const Users = require('./script/actors/users.js');
-    const Decorator = require('./script/props/decorator.js');
+    // TODO: Convert these to ESM imports after converting JS files to TS
+    // const World = require('./script/environment/world.js');
+    // const Users = require('./script/actors/users.js');
+    // const Decorator = require('./script/props/decorator.js');
     let users: any, world: any, decorator: any;
 
     // Function to clean up event listeners and prevent memory leaks
@@ -452,10 +458,13 @@ function initWebsocket(): void {
                 game.renderer.clear();
                 const userList = data.data.users;
                 game.server = requestServer;
-                world = new World(game, Math.round(3.3 * Math.sqrt(Object.keys(userList).length)));
-                decorator = new Decorator(game, world);
-                game.decorator = decorator;
-                users = new Users(game, world);
+                
+                // TODO: Uncomment after converting JS files to TS
+                // world = new World(game, Math.round(3.3 * Math.sqrt(Object.keys(userList).length)));
+                // decorator = new Decorator(game, world);
+                // game.decorator = decorator;
+                // users = new Users(game, world);
+                
                 const params = '?s=' + data.data.request.server;
                 if (window.location.protocol !== 'file:') {
                     window.history.replaceState(
