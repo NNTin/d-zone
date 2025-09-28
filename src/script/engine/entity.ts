@@ -47,14 +47,7 @@ export default class Entity extends EventEmitter {
         this.game = game;
         this.game.entities.push(this);
         
-        console.log('Entity.addToGame:', {
-            entityType: this.constructor.name,
-            hasOwnPropertyPosition: this.hasOwnProperty('position'),
-            positionValue: this.position,
-            positionUndefined: this.position === undefined
-        });
-        
-        if(this.hasOwnProperty('position') && this.position !== undefined) {
+        if(this.position && typeof this.position.x === 'number' && typeof this.position.y === 'number' && typeof this.position.z === 'number') {
             this.game.world.addToWorld(this);
             if(!this.invisible) this.game.renderer.addToZBuffer(this.sprite, this.zDepth);
         } else {
@@ -65,7 +58,7 @@ export default class Entity extends EventEmitter {
 
     remove(): void {
         this.exists = false;
-        if(this.hasOwnProperty('position')) {
+        if(this.position && typeof this.position.x === 'number' && typeof this.position.y === 'number' && typeof this.position.z === 'number') {
             if(!this.invisible && this.game) this.game.renderer.removeFromZBuffer(this.sprite, this.zDepth);
             if(this.game) this.game.world.removeFromWorld(this);
         } else {

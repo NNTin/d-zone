@@ -289,6 +289,27 @@ export class Canvas extends EventEmitter {
         
         if (!sprite.stay && sprite.parent && this.game.mouseOver !== sprite.parent) return;
         
+        // Debug: Check for NaN values before drawing
+        const hasNaNValues = !isFinite(screen.x) || !isFinite(screen.y) || 
+                            !isFinite(sprite.metrics.x) || !isFinite(sprite.metrics.y) || 
+                            !isFinite(sprite.metrics.w) || !isFinite(sprite.metrics.h);
+        
+        if (hasNaNValues) {
+            console.error('Canvas.drawEntity - NaN detected:', {
+                spriteType: sprite.constructor?.name || 'unknown',
+                spriteParent: sprite.parent?.constructor?.name || 'no parent',
+                spriteParentUsername: sprite.parent?.username || 'no username',
+                spriteParentPosition: sprite.parent?.position || 'no position',
+                spriteImage: typeof sprite.image === 'string' ? sprite.image : 'canvas object',
+                screen: { x: screen.x, y: screen.y },
+                metrics: sprite.metrics,
+                drawImageParams: [
+                    sprite.metrics.x, sprite.metrics.y, sprite.metrics.w, sprite.metrics.h,
+                    Math.round(screen.x), Math.round(screen.y), sprite.metrics.w, sprite.metrics.h
+                ]
+            });
+        }
+        
         this.canvas.drawImage(
             image, sprite.metrics.x, sprite.metrics.y, sprite.metrics.w, sprite.metrics.h,
             Math.round(screen.x), Math.round(screen.y), sprite.metrics.w, sprite.metrics.h
