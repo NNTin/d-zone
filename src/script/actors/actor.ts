@@ -45,6 +45,10 @@ export default class Actor extends WorldObject {
     frame: number = 0; // Add frame property for animation
     lastMessage?: { channel?: string; time: number };
     messageBox?: TextBox;
+    moveStart?: number; // Track when movement started
+    movePlaceholder?: Placeholder; // Placeholder during movement
+    destDelta?: { x: number; y: number; z: number }; // Movement deltas
+    unWalkable?: boolean; // Prevent others from walking on this tile during movement
 
     constructor(options: ActorOptions) {
         // Validate input coordinates
@@ -168,6 +172,31 @@ export default class Actor extends WorldObject {
             return { x: 0, y: 0 };
         }
         
+        // Use delta-based interpolation if moving
+        if (this.destination && this.moveStart !== undefined) {
+            const game = this.game as any;
+            if (game && game.ticks !== undefined) {
+                const xDelta = this.destination.x - this.position.x;
+                const yDelta = this.destination.y - this.position.y;
+                const zDelta = this.destination.z - this.position.z;
+                const tick = game.ticks - this.moveStart;
+                const animation = this.sheet.map['hopping'].animation;
+                const totalTicks = 3 * animation.frames;
+                const progress = Math.min(tick / totalTicks, 1);
+                
+                const deltaScreen = {
+                    x: (xDelta - yDelta) * 16 * progress,
+                    y: (xDelta + yDelta) * 8 - zDelta * 16 * progress
+                };
+                
+                return {
+                    x: this.screen.x + deltaScreen.x,
+                    y: this.screen.y + deltaScreen.y
+                };
+            }
+        }
+        
+        // Fallback to standard screen calculation
         const screen = {
             x: (this.position.x - this.position.y) * 16 - 8,
             y: (this.position.x + this.position.y) * 8 - (this.position.z) * 16 - 8
@@ -354,201 +383,99 @@ export default class Actor extends WorldObject {
     startMove(): void {
         if (!this.destination) return;
         
-        // Update facing direction
-        const deltaX = this.destination.x - this.position.x;
-        const deltaY = this.destination.y - this.position.y;
-        
-        if (Math.abs(deltaX) > Math.abs(deltaY)) {
-            this.facing = deltaX > 0 ? 'east' : 'west';
-        } else {
-            this.facing = deltaY > 0 ? 'south' : 'north';
+        const game = this.game as any;
+        if (!game || !game.world) {
+            console.error('Actor.startMove: Game or world not available');
+            return;
         }
+        
+        // Set up movement tracking
+        this.moveStart = game.ticks;
+        
+        // Create placeholder at destination
+        this.movePlaceholder = new Placeholder(this as any, {
+            x: this.destination.x,
+            y: this.destination.y, 
+            z: this.destination.z
+        });
+        
+        // Make current position unwalkable during movement
+        this.unWalkable = true;
+        delete game.world.walkable[this.position.x + ':' + this.position.y];
+        
+        // Calculate movement deltas
+        this.destDelta = {
+            x: this.destination.x - this.position.x,
+            y: this.destination.y - this.position.y,
+            z: this.destination.z - this.position.z
+        };
+        
+        // Update facing direction
+        this.facing = this.destDelta.x < 0 ? 'west' : this.destDelta.x > 0 ? 'east'
+            : this.destDelta.y < 0 ? 'north' : 'south';
         
         // Initialize frame animation
         this.frame = 0;
         
-        // Validate movement duration
-        const moveDuration = 20;
-        if (!isFinite(moveDuration) || moveDuration <= 0) {
-            console.error('Actor.startMove: Invalid movement duration', moveDuration);
-            return;
-        }
+        const animation = this.sheet.map['hopping'].animation;
+        const halfZDepth = (this.position.x + this.position.y + (this.destDelta.x + this.destDelta.y) / 2);
         
         this.moveTick = this.tickRepeat((progress: any) => {
-            // Safety check: ensure destination is still valid
-            // Actor.startMove: Destination became invalid during movement
-            // removing movement if destination is lost
-            if (!this.destination) {
-                if (this.moveTick) {
-                    this.removeFromSchedule(this.moveTick);
-                    delete this.moveTick;
+            if (!this.exists) {
+                if (this.movePlaceholder) {
+                    this.movePlaceholder.remove();
+                    delete this.movePlaceholder;
                 }
                 return;
             }
             
-            // Defensive check for invalid progress values
-            if (!progress || typeof progress.percent !== 'number' || isNaN(progress.percent)) {
-                console.error('Actor.startMove: Invalid progress object received', {
-                    progress,
-                    actor: this.username,
-                    position: this.position,
-                    destination: this.destination
-                });
-                // Stop movement and reset to destination
-                this.position.x = this.destination.x;
-                this.position.y = this.destination.y;
-                this.position.z = this.destination.z;
+            let newFrame = false;
+            if (progress.ticks > 0 && progress.ticks % 3 === 0) {
+                this.frame++;
+                newFrame = true;
+            }
+            
+            // Handle Z-depth changes during movement
+            if (newFrame && this.frame === 6) {
+                // Move zDepth half-way between tiles
+                game.renderer.updateZBuffer(this.zDepth, this.sprite, halfZDepth);
+                this.zDepth = halfZDepth;
+            } else if (newFrame && this.frame === 8) {
+                // Move zDepth all the way
+                const newZDepth = this.destination.x + this.destination.y;
+                game.renderer.updateZBuffer(halfZDepth, this.sprite, newZDepth);
+                this.zDepth = newZDepth;
+            }
+            
+            // Update visual position and sprite (always do this during animation)
+            this.preciseScreen = this.toScreenPrecise();
+            if (this.nametag) {
+                this.nametag.updateScreen();
+            }
+            this.updateSprite();
+            
+            if (this.frame >= animation.frames) {
+                // Movement completed - update actual position
+                if (this.movePlaceholder) {
+                    this.movePlaceholder.remove();
+                    delete this.movePlaceholder;
+                }
+                this.unWalkable = false;
+                
+                // Move to destination (absolute positioning)
+                this.move(this.destination.x, this.destination.y, this.destination.z, true);
                 this.destination = false;
-                this.frame = 0;
-                this.preciseScreen = this.toScreenPrecise();
+                this.frame = 0; // Reset frame instead of delete
+                delete this.moveStart;
+                delete this.destDelta;
+                
+                // Update sprite to reflect current presence state after movement
                 this.updateSprite();
-                delete this.moveTick;
-                return;
-            }
-            
-            if (progress.percent >= 1) {
-                // Movement completed
-                this.position.x = this.destination.x;
-                this.position.y = this.destination.y;
-                this.position.z = this.destination.z;
-                this.destination = false;
-                this.frame = 0; // Reset frame
-                this.zDepth = this.calcZDepth();
-                this.updateScreen();
-                this.preciseScreen = this.toScreenPrecise();
-                // Ensure sprite screen is synchronized
-                if (this.sprite) {
-                    this.sprite.screen = this.screen;
-                }
-                this.updateSprite(); // Update sprite when movement ends
+                
                 this.emit('movecomplete');
                 delete this.moveTick;
-            } else {
-                // Update animation frame based on progress (use all frames for hopping animation)
-                const animation = this.sheet.map['hopping'].animation;
-                this.frame = Math.floor(progress.percent * animation.frames) % animation.frames;
-                
-                // Validate progress.percent
-                if (isNaN(progress.percent)) {
-                    console.error('Actor.startMove: progress.percent is NaN', {
-                        actor: this.username,
-                        progress: progress,
-                        destination: this.destination,
-                        position: this.position
-                    });
-                    this.destination = false;
-                    if (this.moveTick) {
-                        this.removeFromSchedule(this.moveTick);
-                        delete this.moveTick;
-                    }
-                    return;
-                }
-                
-                // Interpolate position during movement
-                const startX = this.position.x;
-                const startY = this.position.y;
-                const startZ = this.position.z;
-                
-                // Validate start position values
-                if (isNaN(startX) || isNaN(startY) || isNaN(startZ)) {
-                    console.error('Actor.startMove: Start position contains NaN', {
-                        actor: this.username,
-                        startX, startY, startZ,
-                        position: this.position,
-                        destination: this.destination
-                    });
-                    this.destination = false;
-                    if (this.moveTick) {
-                        this.removeFromSchedule(this.moveTick);
-                        delete this.moveTick;
-                    }
-                    return;
-                }
-                
-                const targetX = this.destination.x;
-                const targetY = this.destination.y;
-                const targetZ = this.destination.z;
-                
-                // Validate target position values
-                if (isNaN(targetX) || isNaN(targetY) || isNaN(targetZ)) {
-                    console.error('Actor.startMove: Target position contains NaN', {
-                        actor: this.username,
-                        targetX, targetY, targetZ,
-                        destination: this.destination,
-                        position: this.position
-                    });
-                    this.destination = false;
-                    if (this.moveTick) {
-                        this.removeFromSchedule(this.moveTick);
-                        delete this.moveTick;
-                    }
-                    return;
-                }
-                
-                // Linear interpolation
-                const currentX = startX + (targetX - startX) * progress.percent;
-                const currentY = startY + (targetY - startY) * progress.percent;
-                const currentZ = startZ + (targetZ - startZ) * progress.percent;
-                
-                // Validate interpolated coordinates
-                if (isNaN(currentX) || isNaN(currentY) || isNaN(currentZ)) {
-                    console.error('Actor.startMove: Interpolated coordinates contain NaN', {
-                        actor: this.username,
-                        interpolated: { currentX, currentY, currentZ },
-                        start: { startX, startY, startZ },
-                        target: { targetX, targetY, targetZ },
-                        progress: progress.percent,
-                        calculation: {
-                            deltaX: targetX - startX,
-                            deltaY: targetY - startY,
-                            deltaZ: targetZ - startZ,
-                            progressPercent: progress.percent
-                        }
-                    });
-                    this.destination = false;
-                    if (this.moveTick) {
-                        this.removeFromSchedule(this.moveTick);
-                        delete this.moveTick;
-                    }
-                    return;
-                }
-                
-                // Update visual position
-                this.preciseScreen = {
-                    x: (currentX - currentY) * 16 - 8,
-                    y: (currentX + currentY) * 8 - (currentZ) * 16 - 8
-                };
-                
-                // Validate final preciseScreen calculation
-                if (isNaN(this.preciseScreen.x) || isNaN(this.preciseScreen.y)) {
-                    console.error('Actor.startMove: preciseScreen calculation resulted in NaN', {
-                        actor: this.username,
-                        preciseScreen: this.preciseScreen,
-                        interpolated: { currentX, currentY, currentZ },
-                        calculation: {
-                            screenX: `(${currentX} - ${currentY}) * 16 - 8 = ${(currentX - currentY) * 16 - 8}`,
-                            screenY: `(${currentX} + ${currentY}) * 8 - (${currentZ}) * 16 - 8 = ${(currentX + currentY) * 8 - (currentZ) * 16 - 8}`
-                        }
-                    });
-                    this.destination = false;
-                    if (this.moveTick) {
-                        this.removeFromSchedule(this.moveTick);
-                        delete this.moveTick;
-                    }
-                    return;
-                }
-                
-                // Update sprite screen to match preciseScreen for rendering
-                if (this.sprite) {
-                    this.sprite.screen = this.preciseScreen;
-                }
-                
-                // Update sprite every few frames to avoid too much overhead
-                if (Math.floor(progress.percent * 20) % 5 === 0) {
-                    this.updateSprite();
-                }
             }
-        }, 20);
+        }, 3 * animation.frames);
         
         this.updateSprite();
     }
@@ -666,6 +593,16 @@ export default class Actor extends WorldObject {
             if (behavior.detach) behavior.detach();
         }
         this.behaviors = [];
+        
+        // Clean up movement placeholder
+        if (this.movePlaceholder) {
+            try {
+                this.movePlaceholder.remove();
+            } catch (error) {
+                console.error('Actor.remove: Error removing movePlaceholder:', error);
+            }
+            delete this.movePlaceholder;
+        }
         
         // Clean up message box first (talking takes priority)
         if (this.messageBox) {
