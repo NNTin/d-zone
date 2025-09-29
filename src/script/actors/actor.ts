@@ -139,11 +139,21 @@ export default class Actor extends WorldObject {
                 }
             }
             if (this.destination) {
-                this.destination = false;
+                // Only cancel movement if no movement is in progress
                 if (this.moveTick) {
+                    console.log(`Actor.updatePresence: ${this.username} cancelling movement due to presence change to ${presence}`);
                     this.removeFromSchedule(this.moveTick);
                     delete this.moveTick;
+                    // Clean up movement state
+                    if (this.movePlaceholder) {
+                        this.movePlaceholder.remove();
+                        delete this.movePlaceholder;
+                    }
+                    this.unWalkable = false;
+                    delete this.moveStart;
+                    delete this.destDelta;
                 }
+                this.destination = false;
             }
         } else {
             // Add wandering behavior if going online
@@ -279,7 +289,14 @@ export default class Actor extends WorldObject {
             }
         } else if (this.destination) {
             // Moving animation: use frame offset
+            const baseX = metrics.x;
+            const baseY = metrics.y;
             metrics.x += (this.frame || 0) * metrics.w;
+            
+            // Debug: Log sprite metrics for first few frames
+            if (this.frame <= 2) {
+                console.log(`Actor.updateSprite: ${this.username} frame=${this.frame}, facing=${facing}, baseX=${baseX}, baseY=${baseY}, finalX=${metrics.x}, finalY=${metrics.y}, w=${metrics.w}`);
+            }
             
             // Z-level animation for hopping
             const animation = this.sheet.map['hopping'].animation;
@@ -379,12 +396,26 @@ export default class Actor extends WorldObject {
                 movementDeltas: { x, y }
             });
         }
-        console.error('game world cannot walk at destination', destination);
+        // not an error: console.error('game world cannot walk at destination', destination);
         return false;
     }
 
     startMove(): void {
         if (!this.destination) return;
+        
+        console.log(`Actor.startMove: ${this.username} starting move to (${this.destination.x}, ${this.destination.y}, ${this.destination.z}) from (${this.position.x}, ${this.position.y}, ${this.position.z})`);
+        console.log(`Actor.startMove: ${this.username} current facing before calculation: ${this.facing}`);
+        
+        // Prevent starting a new move if one is already in progress
+        if (this.moveTick) {
+            console.warn('Actor.startMove: Movement already in progress, ignoring new startMove call', {
+                actor: this.username,
+                currentDestination: this.destination,
+                frame: this.frame,
+                moveStart: this.moveStart
+            });
+            return;
+        }
         
         const game = this.game as any;
         if (!game || !game.world) {
@@ -421,9 +452,29 @@ export default class Actor extends WorldObject {
             z: this.destination.z - this.position.z
         };
         
-        // Update facing direction
-        this.facing = this.destDelta.x < 0 ? 'west' : this.destDelta.x > 0 ? 'east'
-            : this.destDelta.y < 0 ? 'north' : 'south';
+        // Update facing direction based on the actual movement direction
+        // Movement should always be exactly 1 tile in a cardinal direction
+        if (this.destDelta.x > 0) {
+            this.facing = 'east';
+        } else if (this.destDelta.x < 0) {
+            this.facing = 'west';
+        } else if (this.destDelta.y > 0) {
+            this.facing = 'south';
+        } else if (this.destDelta.y < 0) {
+            this.facing = 'north';
+        }
+        // If no X/Y movement, keep current facing direction
+        
+        // Validate that movement is cardinal (not diagonal)
+        if (this.destDelta.x !== 0 && this.destDelta.y !== 0) {
+            console.warn(`Actor.startMove: ${this.username} diagonal movement detected! This should not happen.`, {
+                destDelta: this.destDelta,
+                destination: this.destination,
+                position: this.position
+            });
+        }
+        
+        console.log(`Actor.startMove: ${this.username} facing direction: ${this.facing} (delta: x=${this.destDelta.x}, y=${this.destDelta.y}, z=${this.destDelta.z})`);
         
         // Initialize frame animation
         this.frame = 0;
@@ -474,6 +525,7 @@ export default class Actor extends WorldObject {
                 this.unWalkable = false;
                 
                 // Move to destination (absolute positioning)
+                console.log(`Actor movement complete: ${this.username} moved to (${this.destination.x}, ${this.destination.y}, ${this.destination.z}), facing: ${this.facing}`);
                 this.move(this.destination.x, this.destination.y, this.destination.z, true);
                 this.destination = false;
                 this.frame = 0; // Reset frame instead of delete
@@ -483,6 +535,7 @@ export default class Actor extends WorldObject {
                 // Update sprite to reflect current presence state after movement
                 this.updateSprite();
                 
+                console.log(`Actor movement complete: ${this.username} emitting movecomplete event`);
                 this.emit('movecomplete');
                 delete this.moveTick;
             }

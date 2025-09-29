@@ -57,8 +57,14 @@ export default class GoTo {
         };
         var moveDir = {
             x: Math.abs(destDelta.x) > Math.abs(destDelta.y) ? Math.max(-1,Math.min(1,destDelta.x)) : 0,
-            y: Math.abs(destDelta.y) >= Math.abs(destDelta.x) ? Math.max(-1,Math.min(1,destDelta.y)) : 0
+            y: Math.abs(destDelta.y) > Math.abs(destDelta.x) ? Math.max(-1,Math.min(1,destDelta.y)) : 0
         };
+        
+        // If magnitudes are equal, prefer X-axis movement for consistency
+        if (Math.abs(destDelta.x) === Math.abs(destDelta.y) && destDelta.x !== 0) {
+            moveDir.x = Math.max(-1, Math.min(1, destDelta.x));
+            moveDir.y = 0;
+        }
         var moveAttempt = this.actor.tryMove(moveDir.x,moveDir.y);
         if(moveAttempt) { // Try to move in the general direction of our target
             this.actor.destination = moveAttempt;
