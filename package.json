@@ -2,27 +2,36 @@
   "name": "d-zone",
   "version": "0.0.11",
   "description": "An ambient life simulation driven by the user activity within a Discord server",
-  "main": "index.js",
+  "type": "module",
+  "main": "index.ts",
+  "exports": {
+    ".": "./index.ts"
+  },
   "dependencies": {
     "express": "^5.1.0",
     "inherits": "^2.0.4",
-    "raf": "^3.1.0",
+    "raf": "^3.4.1",
     "ws": "^8.13.0"
   },
   "devDependencies": {
-    "brfs": "^2.0.1",
-    "browserify": "^17.0.0",
+    "@types/express": "^4.17.23",
+    "@types/node": "^20.19.17",
+    "@types/ws": "^8.18.1",
     "concurrently": "^9.2.1",
-    "terser": "^5.44.0",
-    "watchify": "^4.0.0"
+    "esbuild": "^0.19.12",
+    "events": "^3.3.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build:dev": "browserify src/main.js -t brfs -o dist/static/bundle.js && terser dist/static/bundle.js -o dist/static/bundle.min.js",
-    "build:prod": "browserify src/main.js -t brfs | terser -c -m -o dist/static/bundle.min.js",
-    "watch": "watchify src/main.js -t brfs -d -o dist/static/bundle.min.js -v",
-    "prestart": "npm run build:prod",
-    "start": "node index.js",
+    "build:dev": "esbuild src/main.ts --bundle --sourcemap --outfile=dist/static/bundle.js --format=iife --platform=browser --target=es2020 --define:global=window --external:fs --external:path",
+    "build:prod": "esbuild src/main.ts --bundle --minify --outfile=dist/static/bundle.js --format=iife --platform=browser --target=es2020 --define:global=window --external:fs --external:path",
+    "watch": "esbuild src/main.ts --bundle --sourcemap --outfile=dist/static/bundle.js --format=iife --platform=browser --target=es2020 --define:global=window --external:fs --external:path --watch",
+    "type-check": "tsc --noEmit",
+    "prestart": "npm run build:dev",
+    "start": "node server.mjs",
+    "start:ts": "ts-node --esm index.ts",
     "dev": "concurrently \"npm run watch\" \"npm start\""
   },
   "repository": {

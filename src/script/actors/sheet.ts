@@ -1,0 +1,72 @@
+'use strict';
+
+interface SpriteMetrics {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    ox: number;
+    oy: number;
+}
+
+interface AnimatedSpriteMetrics extends SpriteMetrics {
+    animation?: {
+        frames: number;
+        zStartFrame: number;
+    };
+}
+
+interface ActorSpriteMap {
+    north: SpriteMetrics | AnimatedSpriteMetrics;
+    south: SpriteMetrics | AnimatedSpriteMetrics;
+    east: SpriteMetrics | AnimatedSpriteMetrics;
+    west: SpriteMetrics | AnimatedSpriteMetrics;
+    animation?: {
+        frames: number;
+        zStartFrame: number;
+    };
+}
+
+interface SheetMap {
+    [spriteName: string]: {
+        [state: string]: ActorSpriteMap;
+    };
+}
+
+const map: SheetMap = {
+    actor: {
+        online: {
+            north: { x: 28, y: 0, w: 14, h: 14, ox: 0, oy: 5 },
+            south: { x: 0, y: 0, w: 14, h: 14, ox: 0, oy: 5 },
+            east: { x: 14, y: 0, w: 14, h: 14, ox: 0, oy: 5 },
+            west: { x: 28, y: 0, w: 14, h: 14, ox: 0, oy: 5 }
+        },
+        idle: {
+            north: { x: 56, y: 0, w: 14, h: 14, ox: 0, oy: 5 },
+            south: { x: 42, y: 0, w: 14, h: 14, ox: 0, oy: 5 },
+            east: { x: 56, y: 0, w: 14, h: 14, ox: 0, oy: 5 },
+            west: { x: 42, y: 0, w: 14, h: 14, ox: 0, oy: 5 }
+        },
+        offline: {
+            north: { x: 84, y: 0, w: 14, h: 14, ox: 0, oy: 5 },
+            south: { x: 70, y: 0, w: 14, h: 14, ox: 0, oy: 5 },
+            east: { x: 84, y: 0, w: 14, h: 14, ox: 0, oy: 5 },
+            west: { x: 70, y: 0, w: 14, h: 14, ox: 0, oy: 5 }
+        },
+        hopping: {
+            animation: { frames: 13, zStartFrame: 3 },
+            north: { x: 0, y: 83, w: 35, h: 27, ox: -2, oy: -6 },
+            south: { x: 0, y: 137, w: 35, h: 27, ox: -19, oy: 3 },
+            east: { x: 0, y: 56, w: 35, h: 27, ox: -2, oy: 3 },
+            west: { x: 0, y: 110, w: 35, h: 27, ox: -19, oy: -6 }
+        }
+    }
+};
+
+export default class Sheet {
+    map: any;
+
+    constructor(spriteName: string) {
+        this.map = JSON.parse(JSON.stringify(map[spriteName]));
+    }
+}
