@@ -26,7 +26,7 @@ jobs:
         run: |
           BRANCH=${{ github.ref_name }}
           mkdir -p build/$BRANCH
-          npx browserify src/main.js -t brfs | npx terser -c -m -o build/$BRANCH/static/bundle.min.js
+          npm run build:prod
           cp -r dist/* build/$BRANCH
 
       - name: Deploy to GitHub Pages

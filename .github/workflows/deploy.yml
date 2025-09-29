@@ -27,7 +27,7 @@ jobs:
         run: |
           VERSION=${{ github.event.inputs.version }}
           mkdir -p build/$VERSION
-          npx browserify src/main.js -t brfs | npx terser -c -m -o build/$VERSION/static/bundle.min.js
+          npm run build:prod
           cp -r dist/* build/$VERSION
 
           # Create root index.html that redirects to the current version, preserving socketURL parameter if present
