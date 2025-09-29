@@ -621,9 +621,7 @@ export default class Actor extends WorldObject {
         this.messageBox.scrollMessage(function() {
             delete self.messageBox;
             self.talking = false;
-            if (self.nametag) {
-                self.nametag.sprite.hidden = false;
-            }
+            // Don't automatically show nametag after talking - let onUpdate handle visibility based on mouse hover
             self.updateSprite();
             self.emit('donetalking');
             //if(!self.lastSeed || self.game.ticks - self.lastSeed > 60*60) {
