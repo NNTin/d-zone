@@ -20,7 +20,6 @@ export default class GoTo {
     path?: Position[];
 
     constructor(actor: any, target: any) {
-        console.log(`GoTo.Contructor: ${actor.username} starting to go to target at (${target.position.x}, ${target.position.y})`);
         this.actor = actor;
         this.target = target;
         this.attempt = util.randomIntRange(1, 4);

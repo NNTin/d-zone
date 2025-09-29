@@ -107,23 +107,53 @@ export default class Actor extends WorldObject {
         };
         const metrics = this.sheet.map.online.north;
         if (mouse.x >= this.preciseScreen.x + metrics.ox
-            && mouse.x < this.preciseScreen.x + metrics.ox + metrics.w
+            && mouse.x < this.preciseScreen.x + metrics.w + metrics.ox
             && mouse.y >= this.preciseScreen.y + metrics.oy
-            && mouse.y < this.preciseScreen.y + metrics.oy + metrics.h) {
+            && mouse.y < this.preciseScreen.y + metrics.h + metrics.oy) {
             game.mouseOver = this;
+            // Show nametag when mouse is over this actor (unless talking)
+            if (this.nametag && !this.talking) {
+                this.nametag.sprite.hidden = false;
+            }
+        } else if (game.mouseOver === this) {
+            game.mouseOver = false;
+            // Hide nametag when mouse leaves this actor (unless talking)
+            if (this.nametag && !this.talking) {
+                this.nametag.sprite.hidden = true;
+            }
         }
     }
 
     addToGame(game: any): void {
         super.addToGame(game);
+        
+        // Add role color sheet if needed
+        if (this.roleColor) {
+            game.renderer.addColorSheet({
+                sheet: 'actors', 
+                color: this.roleColor, 
+                alpha: 0.8,
+                regions: [{ alpha: 0.4, x: 70, y: 0, w: 28, h: 14 }] // Less colorizing for offline sprites
+            });
+        }
+        
+        // Add nametag to game
+        if (this.nametag) {
+            this.nametag.addToGame(game);
+            // Initially hide nametag - it will be shown on mouse hover
+            this.nametag.sprite.hidden = true;
+        }
+        
+        // Set up update listener
         game.on('update', this.onUpdate.bind(this));
+        
+        // Connect to users message events (moved from users.ts)
+        if (game.users) {
+            game.users.on('message', this.boundOnMessage);
+        }
+        
         // Initialize default behavior
         this.behaviors.push(new Wander(this));
-        
-        // Now that we have access to the renderer, update sprite with role color if needed
-        if (this.roleColor) {
-            this.updateSprite();
-        }
     }
 
     updatePresence(presence: string): void {
@@ -606,7 +636,6 @@ export default class Actor extends WorldObject {
 
     onMessage(message: any): void {
         // console.log(`Actor.onMessage: ${this.username} received message in channel ${message.channel} from ${message.user.username}`);
-        // Move this to the GoTo behavior - original CommonJS logic
         const lastMessage = this.lastMessage as { channel?: string; time: number } || { time: 0 };
         if (message.channel !== lastMessage.channel) return; // Not my active channel
         if (lastMessage.time < Date.now() - 3 * 60 * 1000) return; // Haven't spoken in 3 minutes
@@ -659,6 +688,12 @@ export default class Actor extends WorldObject {
     }
 
     remove(): void {
+        // Disconnect from users message events
+        const game = this.game as any;
+        if (game && game.users) {
+            game.users.off('message', this.boundOnMessage);
+        }
+        
         // Clean up behaviors
         for (const behavior of this.behaviors) {
             if (behavior.detach) behavior.detach();

@@ -102,9 +102,6 @@ export default class Users extends EventEmitter {
         this.actors[actor.uid] = actor;
         actor.addToGame(this.game);
         actor.updatePresence(data.status);
-        
-        // Connect the actor to listen for message events
-        this.on('message', (actor as any).boundOnMessage);
     }
 
     async updateActor(data: UserData): Promise<void> {
@@ -122,8 +119,6 @@ export default class Users extends EventEmitter {
     }
 
     removeActor(actor: Actor): void {
-        // Disconnect the actor from message events to prevent memory leaks
-        this.off('message', (actor as any).boundOnMessage);
         delete this.actors[actor.uid];
         actor.remove();
     }
