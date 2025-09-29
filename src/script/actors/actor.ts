@@ -292,12 +292,7 @@ export default class Actor extends WorldObject {
             const baseX = metrics.x;
             const baseY = metrics.y;
             metrics.x += (this.frame || 0) * metrics.w;
-            
-            // Debug: Log sprite metrics for first few frames
-            if (this.frame <= 2) {
-                console.log(`Actor.updateSprite: ${this.username} frame=${this.frame}, facing=${facing}, baseX=${baseX}, baseY=${baseY}, finalX=${metrics.x}, finalY=${metrics.y}, w=${metrics.w}`);
-            }
-            
+                        
             // Z-level animation for hopping
             const animation = this.sheet.map['hopping'].animation;
             if (this.frame >= animation.zStartFrame) {
@@ -403,9 +398,6 @@ export default class Actor extends WorldObject {
     startMove(): void {
         if (!this.destination) return;
         
-        console.log(`Actor.startMove: ${this.username} starting move to (${this.destination.x}, ${this.destination.y}, ${this.destination.z}) from (${this.position.x}, ${this.position.y}, ${this.position.z})`);
-        console.log(`Actor.startMove: ${this.username} current facing before calculation: ${this.facing}`);
-        
         // Prevent starting a new move if one is already in progress
         if (this.moveTick) {
             console.warn('Actor.startMove: Movement already in progress, ignoring new startMove call', {
@@ -474,8 +466,6 @@ export default class Actor extends WorldObject {
             });
         }
         
-        console.log(`Actor.startMove: ${this.username} facing direction: ${this.facing} (delta: x=${this.destDelta.x}, y=${this.destDelta.y}, z=${this.destDelta.z})`);
-        
         // Initialize frame animation
         this.frame = 0;
         
@@ -525,7 +515,6 @@ export default class Actor extends WorldObject {
                 this.unWalkable = false;
                 
                 // Move to destination (absolute positioning)
-                console.log(`Actor movement complete: ${this.username} moved to (${this.destination.x}, ${this.destination.y}, ${this.destination.z}), facing: ${this.facing}`);
                 this.move(this.destination.x, this.destination.y, this.destination.z, true);
                 this.destination = false;
                 this.frame = 0; // Reset frame instead of delete
@@ -534,8 +523,6 @@ export default class Actor extends WorldObject {
                 
                 // Update sprite to reflect current presence state after movement
                 this.updateSprite();
-                
-                console.log(`Actor movement complete: ${this.username} emitting movecomplete event`);
                 this.emit('movecomplete');
                 delete this.moveTick;
             }
