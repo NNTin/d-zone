@@ -326,6 +326,12 @@ export default class Actor extends WorldObject {
         const game = this.game as any;
         if (!game.world || !game.world.canWalk) return false;
         
+        if (this.underneath()) {
+            console.log('actor: object on top');
+            this.emit('getoffme');
+            return false; // Can't move with object on top
+        }
+        
         // Validate movement deltas
         if (isNaN(x) || isNaN(y)) {
             console.error('Actor.tryMove: Movement deltas contain NaN', {
@@ -359,24 +365,21 @@ export default class Actor extends WorldObject {
             });
             return false;
         }
-        
+
         if (game.world.canWalk(destination.x, destination.y)) {
-            const height = game.world.getHeight(destination.x, destination.y);
-            
-            // Validate height from world
-            if (isNaN(height)) {
-                console.error('Actor.tryMove: World.getHeight returned NaN', {
-                    actor: this.username,
-                    destination,
-                    height,
-                    worldExists: !!game.world
-                });
-                return false;
+            const walkable = game.world.getHeight(destination.x, destination.y);
+            if (walkable >= 0 && Math.abs(this.position.z - walkable) <= 0.5) {
+                return { x: destination.x, y: destination.y, z: walkable };
             }
-            
-            destination.z = height;
-            return destination;
+            console.error('Actor.tryMove: Destination not walkable or invalid height', {
+                actor: this.username,
+                destination,
+                walkable,
+                currentPosition: this.position,
+                movementDeltas: { x, y }
+            });
         }
+        console.error('game world cannot walk at destination', destination);
         return false;
     }
 
@@ -500,23 +503,24 @@ export default class Actor extends WorldObject {
         }
         
         if (absolute) {
-            this.position.x = x;
-            this.position.y = y;
-            if (typeof z !== 'undefined') this.position.z = z;
-        } else {
-            // Validate current position before relative movement
-            if (isNaN(this.position.x) || isNaN(this.position.y) || isNaN(this.position.z)) {
-                console.error('Actor.move: Current position contains NaN before relative movement', {
-                    actor: this.username,
-                    position: this.position,
-                    movement: { x, y, z }
-                });
-                return;
+            // For absolute positioning, use world.moveObject to ensure walkable updates
+            const game = this.game as any;
+            if (game && game.world && game.world.moveObject) {
+                game.world.moveObject(this, x, y, z !== undefined ? z : this.position.z);
+            } else {
+                // Fallback if world not available
+                this.position.x = x;
+                this.position.y = y;
+                if (typeof z !== 'undefined') this.position.z = z;
             }
-            
-            this.position.x += x;
-            this.position.y += y;
-            if (typeof z !== 'undefined') this.position.z += z;
+        } else {
+            // For relative movement, use WorldObject's move method which calls moveObject
+            if (typeof z !== 'undefined') {
+                super.move(x, y, z);
+            } else {
+                super.move(x, y, 0);
+            }
+            return; // super.move handles everything including screen updates
         }
         
         // Validate final position
@@ -561,7 +565,7 @@ export default class Actor extends WorldObject {
     }
 
     onMessage(message: any): void {
-        console.log(`Actor.onMessage: ${this.username} received message in channel ${message.channel} from ${message.user.username}`);
+        // console.log(`Actor.onMessage: ${this.username} received message in channel ${message.channel} from ${message.user.username}`);
         // Move this to the GoTo behavior - original CommonJS logic
         const lastMessage = this.lastMessage as { channel?: string; time: number } || { time: 0 };
         if (message.channel !== lastMessage.channel) return; // Not my active channel
@@ -578,7 +582,7 @@ export default class Actor extends WorldObject {
         
         this.tickDelay(function() {
             if (geometry.getDistance(self.position, message.user.position) < 3 // If already nearby
-                || self.isUnderneath()) return; // Or if something on top of actor
+                || self.underneath()) return; // Or if something on top of actor
             if (self.destination) {
                 self.once('movecomplete', readyToMove);
             } else {
@@ -612,10 +616,6 @@ export default class Actor extends WorldObject {
                 }
             }
         }
-    }
-
-    isUnderneath(): boolean {
-        return this.placeholder !== undefined;
     }
 
     remove(): void {

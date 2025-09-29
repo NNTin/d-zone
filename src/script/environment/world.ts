@@ -488,7 +488,8 @@ export default class World extends EventEmitter {
         if(topObject.unWalkable) {
             delete this.walkable[x + ':' + y];
         } else {
-            this.walkable[x + ':' + y] = topObject.position.z + topObject.height;
+            const walkableHeight = topObject.position.z + topObject.height;
+            this.walkable[x + ':' + y] = walkableHeight;
         }
     }
 

@@ -36,7 +36,6 @@ export default class GoTo {
     }
 
     startGoTo(): void {
-        console.log(`GoTo.startGoTo: ${this.actor.username} attempting to go to target at (${this.target.position.x}, ${this.target.position.y}), attempt ${this.attempt}`);
         if (!this.actor || this.actor.presence != 'online' || this.actor.underneath()) return;
         
         const adjacent = geometry.closestGrids[this.attempt]; // Pick grid next to target
@@ -56,69 +55,29 @@ export default class GoTo {
             x: this.destination.x - this.actor.position.x, 
             y: this.destination.y - this.actor.position.y 
         };
-        
-        const moveDir = {
-            x: Math.abs(destDelta.x) > Math.abs(destDelta.y) ? Math.max(-1, Math.min(1, destDelta.x)) : 0,
-            y: Math.abs(destDelta.y) >= Math.abs(destDelta.x) ? Math.max(-1, Math.min(1, destDelta.y)) : 0
+        var moveDir = {
+            x: Math.abs(destDelta.x) > Math.abs(destDelta.y) ? Math.max(-1,Math.min(1,destDelta.x)) : 0,
+            y: Math.abs(destDelta.y) >= Math.abs(destDelta.x) ? Math.max(-1,Math.min(1,destDelta.y)) : 0
         };
-
-        const moveAttempt = this.actor.tryMove(moveDir.x, moveDir.y);
-        if (moveAttempt) { // Try to move in the general direction of our target
-            // Validate destination coordinates
-            if (isNaN(moveAttempt.x) || isNaN(moveAttempt.y) || isNaN(moveAttempt.z)) {
-                console.error('GoTo: tryMove returned NaN destination for direct movement', {
-                    actor: this.actor.username,
-                    moveAttempt: moveAttempt,
-                    moveDir: moveDir,
-                    target: this.target.position,
-                    currentPosition: this.actor.position,
-                    attempt: this.attempt
-                });
-                this.attempt++;
-                this.startGoTo();
-                return;
-            }
+        var moveAttempt = this.actor.tryMove(moveDir.x,moveDir.y);
+        if(moveAttempt) { // Try to move in the general direction of our target
             this.actor.destination = moveAttempt;
             this.actor.startMove();
             this.actor.once('movecomplete', this.boundStartGoTo);
         } else { // If moving toward target is blocked, find a path
             this.path = Pathfinder.findPath({ start: this.actor.position, end: this.destination });
-            if (this.path[0]) { // If there is a path
-                // Calculate movement direction to the first path step
-                const pathDelta = {
-                    x: this.path[0].x - this.actor.position.x,
-                    y: this.path[0].y - this.actor.position.y
-                };
-                
-                // Validate the movement is possible
-                const pathMoveAttempt = this.actor.tryMove(pathDelta.x, pathDelta.y);
-                if (pathMoveAttempt) {
-                    // Validate destination coordinates
-                    if (isNaN(pathMoveAttempt.x) || isNaN(pathMoveAttempt.y) || isNaN(pathMoveAttempt.z)) {
-                        console.error('GoTo: tryMove returned NaN destination for pathfinding movement', {
-                            actor: this.actor.username,
-                            pathMoveAttempt: pathMoveAttempt,
-                            pathDelta: pathDelta,
-                            pathStep: this.path[0],
-                            target: this.target.position,
-                            currentPosition: this.actor.position,
-                            attempt: this.attempt
-                        });
-                        this.attempt++;
-                        this.startGoTo();
-                        return;
-                    }
-                    //this.attempt = util.randomIntRange(1,4); // Reset adjacent attempts
-                    this.actor.destination = pathMoveAttempt;
-                    this.actor.startMove();
-                    this.actor.once('movecomplete', this.boundStartGoTo);
-                } else {
-                    // Path step is blocked, try next closest tile
-                    this.attempt++;
-                    this.startGoTo();
-                }
+            if(this.path[0]) { // If there is a path
+                //this.attempt = util.randomIntRange(1,4); // Reset adjacent attempts
+                this.actor.destination = { x: this.path[0].x, y: this.path[0].y, z: this.path[0].z };
+                this.actor.startMove();
+                this.actor.once('movecomplete', this.boundStartGoTo);
             } else { // If no path, try next closest tile
                 this.attempt++;
+                if (this.attempt > 8) { // Prevent infinite recursion
+                    console.log(`GoTo: ${this.actor.username} giving up after 8 attempts`);
+                    this.actor.stopGoTo(this);
+                    return;
+                }
                 this.startGoTo();
             }
         }
