@@ -14,9 +14,17 @@ interface ColorizeOptions {
     }>;
 }
 
-function applyAlpha(source: HTMLCanvasElement, target: HTMLCanvasElement): void {
-    const sourceData = source.getContext('2d')!.getImageData(0, 0, source.width, source.height);
-    const targetCtx = target.getContext('2d')!;
+function applyAlpha(source: HTMLCanvasElement | HTMLImageElement, target: HTMLCanvasElement): void {
+    // Always create a temporary canvas with willReadFrequently for reading image data
+    // This is necessary because existing canvas contexts can't have their options changed
+    const sourceCanvas = document.createElement('canvas');
+    sourceCanvas.width = source.width;
+    sourceCanvas.height = source.height;
+    const sourceCtx = sourceCanvas.getContext('2d', { willReadFrequently: true })!;
+    sourceCtx.drawImage(source, 0, 0);
+    
+    const sourceData = sourceCtx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+    const targetCtx = target.getContext('2d', { willReadFrequently: true })!;
     const targetData = targetCtx.getImageData(0, 0, target.width, target.height);
     
     for(let p = 3; p < targetData.data.length; p += 4) {
@@ -30,7 +38,7 @@ export const ColorUtil = {
         const canvas = document.createElement('canvas');
         canvas.width = options.image.width;
         canvas.height = options.image.height;
-        const context = canvas.getContext('2d')!;
+        const context = canvas.getContext('2d', { willReadFrequently: true })!;
         context.drawImage(options.image, 0, 0, options.image.width, options.image.height,
             0, 0, options.image.width, options.image.height);
         context.globalCompositeOperation = 'color';
@@ -38,7 +46,7 @@ export const ColorUtil = {
         const colorCanvas = document.createElement('canvas');
         colorCanvas.width = options.image.width;
         colorCanvas.height = options.image.height;
-        const colorContext = colorCanvas.getContext('2d')!;
+        const colorContext = colorCanvas.getContext('2d')!;;
         colorContext.fillStyle = options.color;
         colorContext.globalAlpha = options.alpha;
         colorContext.fillRect(0, 0, options.image.width, options.image.height);
@@ -53,7 +61,7 @@ export const ColorUtil = {
             }
         }
         context.drawImage(colorCanvas, 0, 0);
-        applyAlpha(options.image as HTMLCanvasElement, canvas); // Restore original alpha channel
+        applyAlpha(options.image, canvas); // Restore original alpha channel
         return canvas;
     },
     interpolateRGBA: function(RGBA1: string, RGBA2: string, amount: number): string {

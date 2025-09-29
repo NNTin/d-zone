@@ -93,12 +93,6 @@ export default class World extends EventEmitter {
                 import('../actors/pathfinder.js')
             ]);
 
-            console.log('World: Dependencies loaded successfully');
-            console.log('SlabModule:', SlabModule);
-            console.log('TileModule:', TileModule);
-            console.log('TileSheetModule:', TileSheetModule);
-            console.log('PathfinderModule:', PathfinderModule);
-
             SlabClass = SlabModule.default;
             TileClass = TileModule.default;
             TileSheetClass = TileSheetModule.default;
@@ -116,20 +110,17 @@ export default class World extends EventEmitter {
 
     private generateWorld(): void {
         geometry.generateClosestGrids(this.worldSize);
-        console.log('World: Generated closest grids');
         
         testCanvas.clear();
         
         const noiseBig = geometry.buildNoiseMap(this.worldRadius / 3 + 1, this.worldRadius / 3 + 1);
         const noiseSmall = geometry.buildNoiseMap(this.worldRadius / 1.5 + 1, this.worldRadius / 1.5 + 1);
-        console.log('World: Built noise maps');
         
         const bigBlur = (noiseBig.length - 1) / this.worldSize;
         const smallBlur = (noiseSmall.length - 1) / this.worldSize;
         
         this.mapBounds = { xl: 0, yl: 0, xh: 0, yh: 0 };
         
-        console.log('World: Starting world generation loop...');
         for(let tx = 0; tx < this.worldSize; tx++) {
             for(let ty = 0; ty < this.worldSize; ty++) {
                 const bigNoiseValue = geometry.getNoiseMapPoint(noiseBig, tx * bigBlur, ty * bigBlur);

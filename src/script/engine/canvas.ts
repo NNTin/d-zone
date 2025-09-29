@@ -273,9 +273,25 @@ export class Canvas extends EventEmitter {
 
         let image: HTMLCanvasElement;
         if (Array.isArray(sprite.image)) {
-            image = (this.images![sprite.image[0]] as Record<string, HTMLCanvasElement>)[sprite.image[1]];
+            const colorCollection = this.images![sprite.image[0]] as Record<string, HTMLCanvasElement>;
+            if (!colorCollection) {
+                console.error('Canvas.drawEntity - Color collection not found for:', sprite.image[0]);
+                console.error('Available images:', Object.keys(this.images!));
+                return;
+            }
+            image = colorCollection[sprite.image[1]];
+            if (!image) {
+                console.error('Canvas.drawEntity - Colored sprite not found:', sprite.image);
+                console.error('Available in color collection:', Object.keys(colorCollection));
+                return;
+            }
         } else if (typeof sprite.image === 'string') {
             image = this.images![sprite.image] as HTMLCanvasElement;
+            if (!image) {
+                console.error('Canvas.drawEntity - Image not found:', sprite.image);
+                console.error('Available images:', Object.keys(this.images!));
+                return;
+            }
         } else {
             image = sprite.image;
         }
@@ -308,6 +324,8 @@ export class Canvas extends EventEmitter {
                     Math.round(screen.x), Math.round(screen.y), sprite.metrics.w, sprite.metrics.h
                 ]
             });
+            // Skip rendering this sprite to prevent crashes
+            return;
         }
         
         this.canvas.drawImage(

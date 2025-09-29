@@ -1,6 +1,7 @@
 'use strict';
 
 import { EventEmitter } from 'events';
+import { ColorUtil } from '../common/colorutil.js';
 
 interface RendererOptions {
     game: any;
@@ -125,11 +126,17 @@ export class Renderer extends EventEmitter {
 
     addColorSheet(options: any): void {
         if (!this.images[options.color]) this.images[options.color] = {};
-        if (this.images[options.color][options.sheet]) return;
+        if (this.images[options.color][options.sheet]) {
+            return;
+        }
         options.image = this.images[options.sheet];
         
-        // Import ColorUtil dynamically if needed
-        const ColorUtil = require('../common/colorutil.js');
+        if (!options.image) {
+            console.error('Renderer.addColorSheet - Base image not found:', options.sheet);
+            console.error('Available images:', Object.keys(this.images));
+            return;
+        }
+        
         this.images[options.color][options.sheet] = ColorUtil.colorize(options);
     }
 

@@ -140,7 +140,23 @@ export class Game extends EventEmitter {
                 endTick = task.start! + task.count!;
                 if (task.start! <= this.ticks) {
                     const ticks = this.ticks - task.start!;
-                    task.cb({ ticks: ticks, percent: ticks / task.count! });
+                    const percent = task.count! > 0 ? ticks / task.count! : 1; // Prevent division by zero
+                    
+                    // Additional safety check
+                    if (!isFinite(percent)) {
+                        console.error('Game.update: Invalid progress calculation', {
+                            ticks,
+                            taskCount: task.count,
+                            taskStart: task.start,
+                            gameTicks: this.ticks,
+                            percent
+                        });
+                        // Mark task for deletion to prevent further issues
+                        task.type = 'deleted';
+                        continue;
+                    }
+                    
+                    task.cb({ ticks: ticks, percent: percent });
                 }
             } else if (task.type === 'once') {
                 endTick = task.tick;

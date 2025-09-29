@@ -75,8 +75,48 @@ export default class TextBox extends Entity {
 
     updateScreen(): void {
         if(!this.canvas) return;
-        this.screen.x = this.parent.preciseScreen.x - this.canvas.width/2 + this.parent.pixelSize.x;
-        this.screen.y = this.parent.preciseScreen.y - this.canvas.height + 2;
+        
+        // Check if parent still exists and has valid preciseScreen
+        if (!this.parent || !this.parent.preciseScreen) {
+            console.warn('TextBox.updateScreen: Parent or parent.preciseScreen is missing', {
+                hasParent: !!this.parent,
+                hasPreciseScreen: this.parent && !!this.parent.preciseScreen,
+                textboxText: this.text,
+                stackTrace: new Error().stack
+            });
+            // Use fallback coordinates and mark for removal
+            this.screen.x = 0;
+            this.screen.y = 0;
+            if (this.sprite) {
+                this.sprite.screen = this.screen;
+                this.sprite.hidden = true;
+            }
+            // Remove this TextBox as it's orphaned
+            this.remove();
+            return;
+        }
+        
+        // Validate parent coordinates to prevent NaN propagation
+        const parentX = isFinite(this.parent.preciseScreen.x) ? this.parent.preciseScreen.x : 0;
+        const parentY = isFinite(this.parent.preciseScreen.y) ? this.parent.preciseScreen.y : 0;
+        
+        if (parentX !== this.parent.preciseScreen.x || parentY !== this.parent.preciseScreen.y) {
+            console.warn('TextBox.updateScreen: NaN detected in parent.preciseScreen, using fallback', {
+                originalX: this.parent.preciseScreen.x,
+                originalY: this.parent.preciseScreen.y,
+                fallbackX: parentX,
+                fallbackY: parentY,
+                parentType: this.parent.constructor?.name || 'unknown'
+            });
+        }
+        
+        this.screen.x = parentX - this.canvas.width/2 + this.parent.pixelSize.x;
+        this.screen.y = parentY - this.canvas.height + 2;
+        
+        // Ensure sprite screen is synchronized
+        if (this.sprite) {
+            this.sprite.screen = this.screen;
+        }
     }
 
     updateSprite(): void {
@@ -103,6 +143,13 @@ export default class TextBox extends Entity {
             self.remove();
             cb();
         }
+        
+        // Validate parent before starting animation
+        if (!this.parent || !this.parent.preciseScreen) {
+            console.warn('TextBox.scrollMessage: Parent invalid at start, completing immediately');
+            complete();
+            return;
+        }
         this.textMetrics = TextBlotter.calculateMetrics({ text: this.text, maxWidth: TEXTBOX_MAX_WIDTH });
         if(this.text.trim() === '' || this.textMetrics.lines.length === 0 
             || this.textMetrics.lines[0].chars.length === 0) { // No message to show
@@ -119,6 +166,13 @@ export default class TextBox extends Entity {
         }
         //console.log(this.parent.username,'says:',this.text);
         const addLetter = function(): void {
+            // Check if parent is still valid before continuing animation
+            if (!self.parent || !self.parent.preciseScreen) {
+                console.warn('TextBox.scrollMessage: Parent became invalid during animation, stopping');
+                complete();
+                return;
+            }
+            
             lineChar++;
             self.blotText({ 
                 text: self.text, metrics: self.textMetrics, maxChars: lineChar,
@@ -129,6 +183,13 @@ export default class TextBox extends Entity {
                 if(lineNumber >= self.textMetrics.lines.length) { // Last line complete?
                     self.tickDelay(function() {
                         self.tickRepeat(function(progress: any) {
+                            // Check if parent is still valid before updating
+                            if (!self.parent || !self.parent.preciseScreen) {
+                                console.warn('TextBox.scrollMessage: Parent became invalid during closing animation, stopping');
+                                complete();
+                                return;
+                            }
+                            
                             self.canvas = TextBlotter.transition({
                                 bg: TEXTBOX_BG_COLOR, metrics: self.textMetrics, progress: 1 - progress.percent, 
                                 lineCount : Math.min(self.textMetrics.lines.length, TEXTBOX_LINES_PER_PAGE)
@@ -151,6 +212,13 @@ export default class TextBox extends Entity {
             }
         };
         this.tickRepeat(function(progress: any) {
+            // Check if parent is still valid before updating
+            if (!self.parent || !self.parent.preciseScreen) {
+                console.warn('TextBox.scrollMessage: Parent became invalid during opening animation, stopping');
+                complete();
+                return;
+            }
+            
             self.canvas = TextBlotter.transition({
                 bg: TEXTBOX_BG_COLOR, metrics: self.textMetrics, progress: progress.percent,
                 lineCount : Math.min(self.textMetrics.lines.length, TEXTBOX_LINES_PER_PAGE)
@@ -159,6 +227,21 @@ export default class TextBox extends Entity {
             self.updateSprite();
         }, TEXTBOX_OPEN_TIME, function() {
             self.tickDelay(addLetter, scrollSpeed);
-        });
+        })
+    }
+
+    remove(): void {
+        // Cancel any ongoing scroll animations by clearing scheduled tasks
+        if (this.game && this.game.schedule) {
+            for (let i = this.game.schedule.length - 1; i >= 0; i--) {
+                const task = this.game.schedule[i];
+                if (task.entity === this) {
+                    task.type = 'deleted';
+                }
+            }
+        }
+        
+        // Call parent remove method
+        super.remove();
     }
 }

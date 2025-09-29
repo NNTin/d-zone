@@ -74,6 +74,18 @@ export default class Entity extends EventEmitter {
 
     tickRepeat(cb: Function, ticks: number, afterCB?: Function): void { // Execute callback every tick for X ticks
         if(!this.game) return;
+        
+        // Validate ticks parameter to prevent NaN in progress.percent calculation
+        if (!isFinite(ticks) || ticks <= 0) {
+            console.error('Entity.tickRepeat: Invalid ticks parameter', {
+                ticks,
+                entity: this.constructor.name,
+                isFinite: isFinite(ticks),
+                isPositive: ticks > 0
+            });
+            return;
+        }
+        
         this.game.schedule.push({ type: 'repeat', start: this.game.ticks, count: ticks, cb: cb, afterCB: afterCB, entity: this });
     }
 
