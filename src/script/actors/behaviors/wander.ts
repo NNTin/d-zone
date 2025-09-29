@@ -32,6 +32,18 @@ export default class Wander {
             const moveXY = geometry.DIRECTIONS[direction];
             const canMove = this.actor.tryMove(moveXY.x, moveXY.y);
             if (canMove) {
+                // Validate destination coordinates
+                if (isNaN(canMove.x) || isNaN(canMove.y) || isNaN(canMove.z)) {
+                    console.error('Wander: tryMove returned NaN destination', {
+                        actor: this.actor.username,
+                        canMove: canMove,
+                        direction: direction,
+                        moveXY: moveXY,
+                        currentPosition: this.actor.position
+                    });
+                    this.wait();
+                    return;
+                }
                 this.actor.destination = canMove;
                 this.actor.startMove();
                 this.actor.once('movecomplete', this.impulseCompleteBound);

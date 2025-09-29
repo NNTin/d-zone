@@ -392,6 +392,14 @@ export default class Actor extends WorldObject {
         // Set up movement tracking
         this.moveStart = game.ticks;
         
+        // Check if destination coordinates are actually free before creating placeholder
+        const existingObject = game.world.objectAtXYZ(this.destination.x, this.destination.y, this.destination.z);
+        if (existingObject) {
+            // Actor.startMove: Destination already occupied, cancelling movement
+            this.destination = false;
+            return;
+        }
+        
         // Create placeholder at destination
         this.movePlaceholder = new Placeholder(this as any, {
             x: this.destination.x,
@@ -553,11 +561,34 @@ export default class Actor extends WorldObject {
     }
 
     onMessage(message: any): void {
-        // This can be overridden by behaviors
-        console.log(`${this.username} received message:`, message);
+        console.log(`Actor.onMessage: ${this.username} received message in channel ${message.channel} from ${message.user.username}`);
+        // Move this to the GoTo behavior - original CommonJS logic
+        const lastMessage = this.lastMessage as { channel?: string; time: number } || { time: 0 };
+        if (message.channel !== lastMessage.channel) return; // Not my active channel
+        if (lastMessage.time < Date.now() - 3 * 60 * 1000) return; // Haven't spoken in 3 minutes
+        if (message.user === this || this.presence !== 'online') return; // Ignore if self or not online
+        
+        const self = this;
+        function readyToMove() {
+            for (let i = 0; i < self.behaviors.length; i++) {
+                self.behaviors[i].detach();
+            }
+            self.behaviors = [new GoTo(self, message.user)];
+        }
+        
+        this.tickDelay(function() {
+            if (geometry.getDistance(self.position, message.user.position) < 3 // If already nearby
+                || self.isUnderneath()) return; // Or if something on top of actor
+            if (self.destination) {
+                self.once('movecomplete', readyToMove);
+            } else {
+                readyToMove();
+            }
+        }, util.randomIntRange(0, 60)); // To prevent everyone pathfinding on the same tick
     }
 
     goto(x: number, y: number): void {
+        console.log(`Actor.goto: ${this.username} going to (${x}, ${y})`);
         const target = { position: { x: x, y: y, z: (this.game as any).world.getHeight(x, y) } };
         
         // Remove existing GoTo behaviors
