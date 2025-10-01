@@ -1,0 +1,117 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "shell",
+      "label": "Start Development Server",
+      "command": "npm",
+      "args": ["run", "start"],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "new",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "problemMatcher": [],
+      "isBackground": true,
+      "runOptions": {
+        "instanceLimit": 1
+      },
+      "detail": "Start the development server with hot reloading"
+    },
+    {
+      "type": "shell", 
+      "label": "Run Unit Tests",
+      "command": "npm",
+      "args": ["run", "test:unit"],
+      "group": "test",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": true
+      },
+      "problemMatcher": [],
+      "detail": "Run all unit tests with Vitest"
+    },
+    {
+      "type": "shell",
+      "label": "Debug E2E Tests", 
+      "command": "npm",
+      "args": ["run", "test:e2e:debug"],
+      "group": "test",
+      "presentation": {
+        "echo": true,
+        "reveal": "always", 
+        "focus": true,
+        "panel": "new",
+        "showReuseMessage": true,
+        "clear": true
+      },
+      "problemMatcher": [],
+      "detail": "Run E2E tests in debug mode with Playwright inspector"
+    },
+    {
+      "type": "shell",
+      "label": "Run All Tests",
+      "command": "npm", 
+      "args": ["run", "test"],
+      "group": "test",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true, 
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": true
+      },
+      "problemMatcher": [],
+      "dependsOrder": "sequence",
+      "dependsOn": ["Run Unit Tests"],
+      "detail": "Run unit tests followed by E2E tests"
+    },
+    {
+      "type": "shell",
+      "label": "Watch Unit Tests",
+      "command": "npm",
+      "args": ["run", "test:unit:watch"],
+      "group": "test", 
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "new", 
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "problemMatcher": [],
+      "isBackground": true,
+      "runOptions": {
+        "instanceLimit": 1
+      },
+      "detail": "Run unit tests in watch mode for development"
+    },
+    {
+      "type": "shell",
+      "label": "Generate Test Report",
+      "command": "npm",
+      "args": ["run", "test:report"],
+      "group": "test",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": true
+      },
+      "problemMatcher": [],
+      "detail": "Generate and open Allure test report"
+    }
+  ]
+}
