@@ -131,12 +131,58 @@ jobs:
         env:
           ALLURE_RESULTS_PATH: merged-allure-results
           
+      - name: Prepare Vercel deployment
+        run: |
+          mkdir -p vercel-deploy
+          cp -r allure-report/* vercel-deploy/
+          
+          # Create package.json for Vercel
+          cat > vercel-deploy/package.json << 'EOF'
+          {
+            "name": "allure-report-static",
+            "version": "1.0.0",
+            "description": "Static Allure test report",
+            "scripts": {
+              "build": "echo 'Static site - no build needed'"
+            },
+            "devDependencies": {}
+          }
+          EOF
+          
+          # Create vercel.json for static hosting
+          cat > vercel-deploy/vercel.json << 'EOF'
+          {
+            "version": 2,
+            "public": true,
+            "trailingSlash": false,
+            "routes": [
+              {
+                "src": "/(.*)",
+                "dest": "/$1"
+              }
+            ],
+            "headers": [
+              {
+                "source": "/(.*)",
+                "headers": [
+                  {
+                    "key": "Cache-Control",
+                    "value": "public, max-age=3600"
+                  }
+                ]
+              }
+            ]
+          }
+          EOF
+          
       - name: Upload merged Allure report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: allure-report
-          path: allure-report/
+          path: |
+            allure-report/
+            vercel-deploy/
           retention-days: 30
           
       - name: Deploy Allure report to Vercel
@@ -147,9 +193,9 @@ jobs:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          working-directory: allure-report
+          working-directory: vercel-deploy
           scope: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-args: '--prod'
+          vercel-args: '--prod --yes'
           
       - name: Comment deployment URL on PR
         if: always() && github.event_name == 'pull_request'
