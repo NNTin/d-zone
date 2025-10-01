@@ -108,12 +108,18 @@ jobs:
         
       - name: Install Allure CLI
         run: |
+          echo "=== Installing Allure ==="
+          echo "Current working directory: $(pwd)"
           sudo apt-get update
           sudo apt-get install -y openjdk-11-jdk
-          curl -o allure-commandline.tgz -L https://github.com/allure-framework/allure2/releases/download/2.24.1/allure-commandline-2.24.1.tgz
-          tar -zxf allure-commandline.tgz
-          sudo mv allure-2.24.1 /opt/allure
-          sudo ln -s /opt/allure/bin/allure /usr/local/bin/allure
+          echo "Java version:"
+          java -version
+          echo "Downloading Allure..."
+          curl -o allure-2.24.0.tgz -Ls https://github.com/allure-framework/allure2/releases/download/2.24.0/allure-2.24.0.tgz
+          echo "Extracting Allure..."
+          sudo tar -zxvf allure-2.24.0.tgz -C /opt/
+          sudo ln -s /opt/allure-2.24.0/bin/allure /usr/bin/allure
+          echo "Allure version:"
           allure --version
         
       - name: Download all artifacts
