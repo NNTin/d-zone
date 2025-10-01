@@ -94,7 +94,7 @@ Access via `Ctrl+Shift+P` → `Tasks: Run Task`:
 - **📊 Comprehensive Reporting**: JSON output ready for Allure
 - **🎮 VS Code Integration**: Tasks and workspace optimization
 
-## � Writing Tests
+## 📝 Writing Tests
 
 ### Unit Test Template
 ```typescript
