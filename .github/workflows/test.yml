@@ -29,7 +29,19 @@ jobs:
         run: npm ci
         
       - name: Run unit tests
-        run: npm run test:unit
+        run: |
+          mkdir -p allure-results
+          npm run test:unit
+        
+      - name: List generated files for debugging
+        if: always()
+        run: |
+          echo "Contents of allure-results directory:"
+          ls -la allure-results/ || echo "allure-results directory not found"
+          echo "Contents of coverage directory:"
+          ls -la coverage/ || echo "coverage directory not found"
+          echo "Root directory contents:"
+          ls -la
         
       - name: Upload unit test results
         if: always()
@@ -37,8 +49,8 @@ jobs:
         with:
           name: unit-test-results
           path: |
-            allure-results/
-            coverage/
+            allure-results/**/*
+            coverage/**/*
           retention-days: 30
 
   e2e-tests:

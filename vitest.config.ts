@@ -27,7 +27,8 @@ export default defineConfig({
     /* Reporter configuration */
     reporter: [
       'default',
-      'json'
+      'json',
+      'allure-vitest/reporter'
     ],
     
     /* Test filtering by tags */
