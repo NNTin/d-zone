@@ -4,7 +4,7 @@
  */
 
 import { beforeAll, beforeEach } from 'vitest';
-import { setupGlobalMocks } from './mocks/browserMocks.js';
+import { setupGlobalMocks } from './mocks/browserMocks';
 
 // Setup global mocks for all tests
 beforeAll(() => {
