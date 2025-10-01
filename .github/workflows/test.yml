@@ -106,14 +106,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          
-      - name: Install dependencies
-        run: npm ci
+      - name: Install Allure CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openjdk-11-jdk
+          curl -o allure-commandline.tgz -L https://github.com/allure-framework/allure2/releases/download/2.24.1/allure-commandline-2.24.1.tgz
+          tar -zxf allure-commandline.tgz
+          sudo mv allure-2.24.1 /opt/allure
+          sudo ln -s /opt/allure/bin/allure /usr/local/bin/allure
+          allure --version
         
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -154,9 +155,17 @@ jobs:
           
       - name: Generate Allure report
         run: |
-          npm run test:report:generate
-        env:
-          ALLURE_RESULTS_PATH: merged-allure-results
+          echo "=== Merged results before generation ==="
+          ls -la merged-allure-results/ | head -10
+          echo "Total files: $(ls -1 merged-allure-results/ | wc -l)"
+          echo ""
+          
+          # Generate Allure report directly using CLI
+          allure generate merged-allure-results --clean --output allure-report
+          
+          echo "=== Generated report structure ==="
+          ls -la allure-report/ | head -10
+          echo "Report index exists: $(test -f allure-report/index.html && echo 'YES' || echo 'NO')"
           
       - name: Prepare Vercel deployment
         run: |
