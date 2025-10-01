@@ -11,6 +11,7 @@ This comprehensive guide explains the testing structure, workflows, and best pra
 - [Test Types](#-test-types)
 - [Running Tests](#-running-tests)
 - [VS Code Integration](#-vs-code-integration)
+- [Canvas Game Testing](#-canvas-game-testing)
 - [Mocking Strategy](#-mocking-strategy)
 - [CI/CD Pipeline](#-cicd-pipeline)
 - [Writing Tests](#-writing-tests)
@@ -162,34 +163,55 @@ describe('@normal Actor Movement', () => {
 
 ### E2E Tests (Playwright)
 
-**Purpose**: Test complete user workflows and integrations
+**Purpose**: Test complete user workflows and canvas game interactions
 
 **Framework**: Playwright with Chromium browser  
 **File Pattern**: `*.e2e.ts`  
 **Execution**: Slower, real browser, auto dev server
+**Testing Method**: **Log-based verification** for canvas games
+
+**Canvas Game Testing**: Since our game renders to a `<canvas>` element, traditional DOM-based E2E testing is insufficient. We use **structured logging** to emit testable events that verify game behavior.
 
 **Example Structure**:
 ```typescript
 import { test, expect } from '@playwright/test';
-import { GameTestAssertions } from '../utils/testHelpers.js';
+import { CanvasGameTestUtils, GameAssertions } from './utils/canvasTestUtils.js';
 
 test.describe('@critical Actor Nametag System', () => {
+  let gameUtils: CanvasGameTestUtils;
+
   test.beforeEach(async ({ page }) => {
+    gameUtils = new CanvasGameTestUtils(page);
+    await gameUtils.startLogCapture();
     await page.goto('/');
-    await GameTestAssertions.waitForGameLoad(page);
+    await GameAssertions.assertCanvasVisible(page);
+    await GameAssertions.assertGameLoaded(gameUtils);
   });
 
   test('@critical @active should show only one nametag at a time', async ({ page }) => {
-    // User workflow testing
+    // Wait for actors to spawn via log events
+    await gameUtils.waitForActorCount(2);
+    
+    const actors = gameUtils.getGameState().actors;
+    
+    // Test canvas interactions
+    await gameUtils.hoverOnCanvas(actors[0].x * 32, actors[0].y * 32);
+    await gameUtils.waitForGameEvent('nametag', 'show');
+    
+    // Verify game state through logs
+    await gameUtils.expectSingleNametagVisible();
   });
 });
 ```
 
 **Best For**:
-- User interaction flows
-- Cross-component integration
-- Browser compatibility
-- Visual regression testing
+- Canvas game interactions (hover, click, movement)
+- Actor behavior verification  
+- Game state validation
+- WebSocket connection testing
+- Animation and rendering verification
+
+**See Also**: [Canvas Testing Guide](./CANVAS_TESTING_GUIDE.md) for detailed implementation
 
 ## 🚀 Running Tests
 
@@ -280,6 +302,50 @@ Consider adding these to your VS Code keybindings:
   "args": "Debug E2E Tests"
 }
 ```
+
+## 🎨 Canvas Game Testing
+
+Our canvas-based game requires a **specialized E2E testing approach** since traditional DOM inspection doesn't work with `<canvas>` elements.
+
+### Log-Based Testing Strategy
+
+**Problem**: Canvas games render everything to a single element, making game state invisible to standard E2E tests.
+
+**Solution**: Structured logging that emits testable events, allowing tests to verify game behavior through console log analysis.
+
+### Key Components
+
+1. **GameLogger**: Structured logging utility in game code
+2. **CanvasGameTestUtils**: Test utilities for log capture and analysis  
+3. **GameAssertions**: Custom assertions for game state verification
+4. **Event-driven Tests**: Tests that wait for and verify specific game events
+
+### Quick Example
+
+```typescript
+// In game code - emit testable events
+gameLogger.actorSpawned({ uid: 'actor-123', username: 'player1', x: 5, y: 5 });
+gameLogger.nametagShow('actor-123');
+
+// In E2E tests - verify through logs
+await gameUtils.waitForActorCount(1);
+await gameUtils.waitForGameEvent('nametag', 'show');
+await gameUtils.expectActorPosition('player1', 5, 5);
+```
+
+### Implementation Guide
+
+For detailed implementation steps, integration examples, and migration strategies, see:
+
+📋 **[Canvas Testing Guide](./CANVAS_TESTING_GUIDE.md)**
+
+This approach provides robust testing for:
+- Actor interactions and movement
+- Nametag behavior verification
+- Canvas click/hover events  
+- WebSocket connection state
+- Animation and rendering verification
+- Game performance metrics
 
 ## 🎭 Mocking Strategy
 

@@ -3,8 +3,7 @@
  * @tags @critical @normal @active
  */
 
-import { test, expect } from '@playwright/test';
-// import { GameTestAssertions } from '../utils/testHelpers.js';
+import { expect, test } from '@playwright/test';
 
 test.describe('@critical Game Initialization', () => {
   test('@critical @active should load game canvas successfully', async ({ page }) => {

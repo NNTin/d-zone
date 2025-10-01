@@ -1,49 +1,80 @@
 /**
- * @file E2E tests for actor interaction system
+ * @file E2E tests for actor interaction system using log-based verification
  * @tags @critical @normal @active
  */
 
-import { test, expect } from '@playwright/test';
-// import { GameTestAssertions, TestDataBuilder, PerformanceUtils } from '../utils/testHelpers.js';
+import { expect, test } from '@playwright/test';
+import { CanvasGameTestUtils, GameAssertions } from './utils/canvasTestUtils.js';
 
 test.describe('@critical Actor Nametag System', () => {
+  let gameUtils: CanvasGameTestUtils;
+
   test.beforeEach(async ({ page }) => {
+    gameUtils = new CanvasGameTestUtils(page);
+    await gameUtils.startLogCapture();
     await page.goto('/');
-    await GameTestAssertions.waitForGameLoad(page);
+    
+    // Wait for canvas to be visible and game to initialize
+    await GameAssertions.assertCanvasVisible(page);
+    await GameAssertions.assertGameLoaded(gameUtils);
   });
 
   test('@critical @active should show only one nametag when hovering multiple actors', async ({ page }) => {
-    // TODO: Implement multi-actor nametag test
-    // This addresses the specific bug mentioned in the conversation
+    // Wait for at least 2 actors to spawn
+    await gameUtils.waitForActorCount(2, 10000);
     
-    // 1. Create two actors on the game board
-    // 2. Hover over first actor
-    // 3. Verify first actor's nametag is visible
-    // 4. Hover over second actor  
-    // 5. Verify only second actor's nametag is visible
-    // 6. Verify first actor's nametag is hidden
+    const actors = gameUtils.getGameState().actors;
+    expect(actors.length).toBeGreaterThanOrEqual(2);
     
-    await expect(page.locator('[data-testid="game-canvas"]')).toBeVisible();
-    // Placeholder assertion until implementation
+    // Hover over first actor (convert game coordinates to canvas pixels if needed)
+    await gameUtils.hoverOnCanvas(actors[0].x * 32, actors[0].y * 32); // Assuming 32px tiles
+    
+    // Wait for nametag show event
+    await gameUtils.waitForGameEvent('nametag', 'show');
+    
+    // Hover over second actor  
+    await gameUtils.hoverOnCanvas(actors[1].x * 32, actors[1].y * 32);
+    
+    // Wait for the second nametag show event
+    await gameUtils.waitForGameEvent('nametag', 'show');
+    
+    // Verify only one nametag is visible (should have triggered hide for first)
+    await gameUtils.expectSingleNametagVisible();
   });
 
   test('@normal @active should hide nametag when mouse leaves actor', async ({ page }) => {
-    // TODO: Implement nametag hide test
-    await expect(page.locator('[data-testid="game-canvas"]')).toBeVisible();
-    // Placeholder assertion
+    // Wait for at least 1 actor
+    await gameUtils.waitForActorCount(1, 10000);
+    
+    const actor = gameUtils.getGameState().actors[0];
+    
+    // Hover over actor
+    await gameUtils.hoverOnCanvas(actor.x * 32, actor.y * 32);
+    await gameUtils.waitForGameEvent('nametag', 'show');
+    
+    // Move mouse away from actor
+    await gameUtils.hoverOnCanvas(0, 0); // Hover on empty space
+    
+    // Wait for nametag hide event
+    await gameUtils.waitForGameEvent('nametag', 'hide');
+    
+    // Verify no nametags are visible
+    const nametagLogs = gameUtils.getLogsByCategory('nametag');
+    const showEvents = nametagLogs.filter(log => log.event === 'show');
+    const hideEvents = nametagLogs.filter(log => log.event === 'hide');
+    expect(showEvents.length).toBe(hideEvents.length);
   });
 
-  test('@normal @active should not show nametag while actor is talking', async ({ page }) => {
-    // TODO: Implement talking state nametag test
-    await expect(page.locator('[data-testid="game-canvas"]')).toBeVisible();
-    // Placeholder assertion
+  test.skip('@normal @active should not show nametag while actor is talking', async ({ page }) => {
+    // TODO: Implement when talking state is available in game logs
   });
 
   test.skip('@inactive should handle nametag positioning near screen edges', async ({ page }) => {
-    // TODO: Implement screen edge test
+    // TODO: Test nametag positioning logic
   });
+
   test.skip('@long should maintain nametag performance with many actors', async ({ page }) => {
-    // TODO: Implement nametag performance test
+    // TODO: Performance test with many actors
   });
 });
 
