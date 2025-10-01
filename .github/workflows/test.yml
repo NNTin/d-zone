@@ -143,7 +143,9 @@ jobs:
             "version": "1.0.0",
             "description": "Static Allure test report",
             "scripts": {
-              "build": "echo 'Static site - no build needed'"
+              "build": "echo 'Static site - no build needed'",
+              "build:prod": "echo 'Static site - no build needed'",
+              "start": "echo 'Static site ready'"
             },
             "devDependencies": {}
           }
@@ -156,6 +158,8 @@ jobs:
             "public": true,
             "trailingSlash": false,
             "cleanUrls": true,
+            "buildCommand": "echo 'No build needed for static files'",
+            "outputDirectory": "./",
             "headers": [
               {
                 "source": "/(.*)",
