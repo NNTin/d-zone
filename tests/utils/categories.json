@@ -1,0 +1,22 @@
+[
+  {
+    "name": "Critical Issues",
+    "messageRegex": ".*critical.*",
+    "description": "Tests that validate critical system functionality"
+  },
+  {
+    "name": "Product defects", 
+    "messageRegex": ".*@normal.*failed.*",
+    "description": "Normal functionality that is not working as expected"
+  },
+  {
+    "name": "Performance Issues",
+    "messageRegex": ".*@long.*timeout.*",
+    "description": "Tests that failed due to performance or timeout issues"
+  },
+  {
+    "name": "Infrastructure Issues",
+    "messageRegex": ".*connection.*|.*network.*|.*server.*",
+    "description": "Issues related to test infrastructure or external dependencies"
+  }
+]

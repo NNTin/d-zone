@@ -1,0 +1,332 @@
+name: Test Pipeline
+
+on:
+  push:
+    branches: [ master, develop, feature/*, fix/* ]
+  pull_request:
+    branches: [ master, develop ]
+
+env:
+  NODE_VERSION: '24.8.0'
+  ALLURE_RESULTS_PATH: 'allure-results'
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Prepare unit test environment
+        run: |
+          # Create environment.properties for unit tests
+          mkdir -p allure-results
+          cat > allure-results/environment.properties << EOF
+          Environment=CI
+          Browser=N/A
+          Node.Version=${{ env.NODE_VERSION }}
+          Platform=Ubuntu
+          Test.Framework=Playwright+Vitest
+          Report.Type=Allure
+          Shard=1/1
+          Test.Type=Unit
+          Execution.Mode=Single
+          EOF
+        
+      - name: Run unit tests
+        run: |
+          npm run test:unit
+        env:
+          ALLURE_TEST_TYPE: Unit
+        
+      - name: List generated files for debugging
+        if: always()
+        run: |
+          echo "Contents of allure-results directory:"
+          ls -la allure-results/ || echo "allure-results directory not found"
+          echo "Contents of coverage directory:"
+          ls -la coverage/ || echo "coverage directory not found"
+          echo "Root directory contents:"
+          ls -la
+        
+      - name: Upload unit test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: |
+            allure-results/**/*
+            coverage/**/*
+          retention-days: 30
+
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+        
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Install Playwright browsers
+        run: npx playwright install chromium
+        
+      - name: Build application
+        run: npm run build:dev
+        
+      - name: Prepare shard-specific environment
+        run: |
+          # Create shard-specific environment.properties for Allure
+          mkdir -p allure-results
+          cat > allure-results/environment.properties << EOF
+          Environment=CI
+          Browser=Chromium
+          Node.Version=${{ env.NODE_VERSION }}
+          Platform=Ubuntu
+          Test.Framework=Playwright+Vitest
+          Report.Type=Allure
+          Shard=${{ matrix.shard }}/${{ strategy.job-total }}
+          Test.Type=E2E
+          Execution.Mode=Sharded
+          EOF
+        
+      - name: Run E2E tests
+        run: npx playwright test --project=ci --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+        env:
+          CI: true
+          ALLURE_SHARD_ID: ${{ matrix.shard }}
+          ALLURE_TOTAL_SHARDS: ${{ strategy.job-total }}
+          ALLURE_TEST_TYPE: E2E
+          
+      - name: Upload E2E test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results-${{ matrix.shard }}
+          path: |
+            allure-results/
+            test-results/
+            playwright-report/
+          retention-days: 30
+
+  merge-reports:
+    name: Merge Test Reports
+    runs-on: ubuntu-latest
+    needs: [unit-tests, e2e-tests]
+    if: always()
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Install Allure CLI
+        run: |
+          echo "=== Installing Allure ==="
+          echo "Current working directory: $(pwd)"
+          sudo apt-get update
+          sudo apt-get install -y openjdk-11-jdk
+          echo "Java version:"
+          java -version
+          echo "Downloading Allure..."
+          curl -o allure-2.24.0.tgz -Ls https://github.com/allure-framework/allure2/releases/download/2.24.0/allure-2.24.0.tgz
+          echo "Extracting Allure..."
+          sudo tar -zxvf allure-2.24.0.tgz -C /opt/
+          sudo ln -s /opt/allure-2.24.0/bin/allure /usr/bin/allure
+          echo "Allure version:"
+          allure --version
+        
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          
+      - name: Merge Allure results
+        run: |
+          mkdir -p merged-allure-results
+          
+          # Debug: Show artifact structure
+          echo "=== Artifact structure ==="
+          find artifacts -type f | head -20
+          echo ""
+          echo "=== Looking for allure-results directories ==="
+          find artifacts -name "allure-results" -type d
+          echo ""
+          echo "=== Looking for JSON files ==="
+          find artifacts -name "*.json" | head -10
+          echo ""
+          
+          # Copy all JSON and other allure files from all artifact directories
+          find artifacts -name "allure-results" -type d | while read dir; do
+            if [ -d "$dir" ] && [ "$(ls -A "$dir")" ]; then
+              echo "Copying from: $dir"
+              cp -r "$dir"/* merged-allure-results/ 2>/dev/null || true
+            fi
+          done
+          
+          # Also copy any loose allure files that might be directly in artifact folders
+          find artifacts -name "*-result.json" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
+          find artifacts -name "*-container.json" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
+          find artifacts -name "*-attachment.*" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
+          
+          # Show what we collected
+          echo "=== Merged results ==="
+          ls -la merged-allure-results/ | head -10
+          
+      - name: Generate Allure report
+        run: |
+          echo "=== Merged results before generation ==="
+          ls -la merged-allure-results/ | head -10
+          echo "Total files: $(ls -1 merged-allure-results/ | wc -l)"
+          echo ""
+          
+          # Generate Allure report directly using CLI
+          allure generate merged-allure-results --clean --output allure-report
+          
+          echo "=== Generated report structure ==="
+          ls -la allure-report/ | head -10
+          echo "Report index exists: $(test -f allure-report/index.html && echo 'YES' || echo 'NO')"
+          
+      - name: Prepare Vercel deployment
+        run: |
+          mkdir -p vercel-deploy
+          cp -r allure-report/* vercel-deploy/
+          
+          # Create package.json for Vercel
+          cat > vercel-deploy/package.json << 'EOF'
+          {
+            "name": "allure-report-static",
+            "version": "1.0.0",
+            "description": "Static Allure test report",
+            "scripts": {
+              "build": "echo 'Static site - no build needed'",
+              "build:prod": "echo 'Static site - no build needed'",
+              "start": "echo 'Static site ready'"
+            },
+            "devDependencies": {}
+          }
+          EOF
+          
+          # Create vercel.json for static hosting
+          cat > vercel-deploy/vercel.json << 'EOF'
+          {
+            "version": 2,
+            "public": true,
+            "trailingSlash": false,
+            "cleanUrls": true,
+            "buildCommand": "echo 'No build needed for static files'",
+            "outputDirectory": "./",
+            "headers": [
+              {
+                "source": "/(.*)",
+                "headers": [
+                  {
+                    "key": "Cache-Control",
+                    "value": "public, max-age=3600"
+                  }
+                ]
+              }
+            ]
+          }
+          EOF
+          
+      - name: Upload merged Allure report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report
+          path: |
+            allure-report/
+            vercel-deploy/
+          retention-days: 30
+          
+      - name: Deploy Allure report to Vercel
+        if: always()
+        id: vercel-deployment
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          working-directory: vercel-deploy
+          scope: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-args: '--prod'
+          
+      - name: Comment deployment URL on PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deploymentUrl = '${{ steps.vercel-deployment.outputs.preview-url }}';
+            const comment = `## 📊 Test Report Deployed
+            
+            🚀 **Allure Test Report**: ${deploymentUrl}
+            
+            View detailed test results, including:
+            - ✅ Unit test results
+            - 🎭 E2E test results with screenshots/videos
+            - 📈 Test trends and history
+            - 🐛 Failure analysis
+            
+            *Report generated from commit: ${context.sha.substring(0, 7)}*`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [unit-tests, e2e-tests]
+    if: always()
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          
+      - name: Create test summary
+        run: |
+          echo "## 🧪 Test Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ needs.unit-tests.result }}" == "success" ]; then
+            echo "✅ Unit Tests: **PASSED**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Unit Tests: **FAILED**" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.e2e-tests.result }}" == "success" ]; then
+            echo "✅ E2E Tests: **PASSED**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ E2E Tests: **FAILED**" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📊 [View detailed Allure report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY

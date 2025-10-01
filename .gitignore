@@ -85,5 +85,11 @@ build/Release
 # https://www.npmjs.org/doc/misc/npm-faq.html#should-i-check-my-node_modules-folder-into-git
 node_modules
 
+# Test artifacts
+test-results/
+playwright-report/
+allure-results/
+allure-report/
+coverage/
 
 /dist/static/bundle.js.map
