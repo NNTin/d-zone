@@ -28,10 +28,27 @@ jobs:
       - name: Install dependencies
         run: npm ci
         
+      - name: Prepare unit test environment
+        run: |
+          # Create environment.properties for unit tests
+          mkdir -p allure-results
+          cat > allure-results/environment.properties << EOF
+          Environment=CI
+          Browser=N/A
+          Node.Version=${{ env.NODE_VERSION }}
+          Platform=Ubuntu
+          Test.Framework=Playwright+Vitest
+          Report.Type=Allure
+          Shard=1/1
+          Test.Type=Unit
+          Execution.Mode=Single
+          EOF
+        
       - name: Run unit tests
         run: |
-          mkdir -p allure-results
           npm run test:unit
+        env:
+          ALLURE_TEST_TYPE: Unit
         
       - name: List generated files for debugging
         if: always()
@@ -80,10 +97,29 @@ jobs:
       - name: Build application
         run: npm run build:dev
         
+      - name: Prepare shard-specific environment
+        run: |
+          # Create shard-specific environment.properties for Allure
+          mkdir -p allure-results
+          cat > allure-results/environment.properties << EOF
+          Environment=CI
+          Browser=Chromium
+          Node.Version=${{ env.NODE_VERSION }}
+          Platform=Ubuntu
+          Test.Framework=Playwright+Vitest
+          Report.Type=Allure
+          Shard=${{ matrix.shard }}/${{ strategy.job-total }}
+          Test.Type=E2E
+          Execution.Mode=Sharded
+          EOF
+        
       - name: Run E2E tests
         run: npx playwright test --project=ci --shard=${{ matrix.shard }}/${{ strategy.job-total }}
         env:
           CI: true
+          ALLURE_SHARD_ID: ${{ matrix.shard }}
+          ALLURE_TOTAL_SHARDS: ${{ strategy.job-total }}
+          ALLURE_TEST_TYPE: E2E
           
       - name: Upload E2E test results
         if: always()
