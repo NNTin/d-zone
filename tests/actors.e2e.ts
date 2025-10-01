@@ -4,7 +4,7 @@
  */
 
 import { expect, test } from '@playwright/test';
-import { CanvasGameTestUtils, GameAssertions } from './utils/canvasTestUtils.js';
+import { CanvasGameTestUtils, GameAssertions } from './utils/canvasTestUtils';
 
 test.describe('@critical Actor Nametag System', () => {
   let gameUtils: CanvasGameTestUtils;
