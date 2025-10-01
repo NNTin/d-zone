@@ -127,9 +127,7 @@ jobs:
           
       - name: Generate Allure report
         run: |
-          npm run test:report:generate
-        env:
-          ALLURE_RESULTS_PATH: merged-allure-results
+          allure generate merged-allure-results --clean
           
       - name: Prepare Vercel deployment
         run: |
