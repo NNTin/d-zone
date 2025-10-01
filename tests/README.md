@@ -126,7 +126,7 @@ npm run test:e2e:headed
 npm run test:e2e:debug
 ```
 
-## � Configuration Files
+## ⚙️ Configuration Files
 
 - `playwright.config.ts` - E2E test configuration
 - `vitest.config.ts` - Unit test configuration  
