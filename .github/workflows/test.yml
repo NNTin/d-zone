@@ -7,7 +7,7 @@ on:
     branches: [ master, develop ]
 
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: '24.8.0'
   ALLURE_RESULTS_PATH: 'allure-results'
 
 jobs:
