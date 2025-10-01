@@ -230,7 +230,7 @@ npm run test:report
 The **auto dev server** feature ensures E2E tests always run against the correct application version:
 
 - **Automatically starts** `npm run dev` before E2E tests
-- **Waits** for `http://127.0.0.1:3000` to be ready
+- **Waits** for `http://127.0.0.1:8080` to be ready
 - **Reuses** existing server locally (saves startup time)
 - **Fresh server** in CI for isolation
 - **Automatic cleanup** when tests complete
@@ -569,7 +569,7 @@ Error: Timeout 30000ms exceeded
 - Verify test selectors are correct
 
 **Dev server not starting**:
-- Check if port 3000 is available
+- Check if port 8080 is available
 - Verify `npm run dev` works manually
 - Check webServer configuration in playwright.config.ts
 

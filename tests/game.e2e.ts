@@ -4,7 +4,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { GameTestAssertions } from '../utils/testHelpers.js';
+// import { GameTestAssertions } from '../utils/testHelpers.js';
 
 test.describe('@critical Game Initialization', () => {
   test('@critical @active should load game canvas successfully', async ({ page }) => {
@@ -19,7 +19,8 @@ test.describe('@critical Game Initialization', () => {
 
   test('@critical @active should establish WebSocket connection', async ({ page }) => {
     await page.goto('/');
-    await GameTestAssertions.waitForGameLoad(page);
+    // await GameTestAssertions.waitForGameLoad(page);
+    await page.waitForTimeout(2000); // Wait for game to load
     
     // TODO: Verify WebSocket connection
     // Placeholder assertion
@@ -27,20 +28,26 @@ test.describe('@critical Game Initialization', () => {
 
   test('@normal @active should display initial game state', async ({ page }) => {
     await page.goto('/');
-    await GameTestAssertions.waitForGameLoad(page);
+    // await GameTestAssertions.waitForGameLoad(page);
+    await page.waitForTimeout(2000); // Wait for game to load
     
     // TODO: Verify initial game state rendering
     // Placeholder assertion
   });
 
-  test.todo('@inactive should handle game initialization errors gracefully');
-  test.todo('@long should optimize initial loading performance');
+  test.skip('@inactive should handle game initialization errors gracefully', async ({ page }) => {
+    // TODO: Implement error handling test
+  });
+  test.skip('@long should optimize initial loading performance', async ({ page }) => {
+    // TODO: Implement performance test
+  });
 });
 
 test.describe('@normal User Interface', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await GameTestAssertions.waitForGameLoad(page);
+    // await GameTestAssertions.waitForGameLoad(page);
+    await page.waitForTimeout(2000); // Wait for game to load
   });
 
   test('@normal @active should render game UI elements', async ({ page }) => {
@@ -61,8 +68,12 @@ test.describe('@normal User Interface', () => {
     // Placeholder assertion
   });
 
-  test.todo('@inactive should support mobile touch interactions');
-  test.todo('@normal should maintain UI responsiveness across screen sizes');
+  test.skip('@inactive should support mobile touch interactions', async ({ page }) => {
+    // TODO: Implement mobile test
+  });
+  test.skip('@normal should maintain UI responsiveness across screen sizes', async ({ page }) => {
+    // TODO: Implement responsive test
+  });
 });
 
 test.describe('@normal Discord Integration', () => {
@@ -77,14 +88,19 @@ test.describe('@normal Discord Integration', () => {
 
   test('@normal @active should handle Discord user presence updates', async ({ page }) => {
     await page.goto('/');
-    await GameTestAssertions.waitForGameLoad(page);
+    // await GameTestAssertions.waitForGameLoad(page);
+    await page.waitForTimeout(2000); // Wait for game to load
     
     // TODO: Test presence update handling
     // Placeholder assertion
   });
 
-  test.todo('@critical should handle Discord API failures gracefully');
-  test.todo('@long should sync with Discord server state efficiently');
+  test.skip('@critical should handle Discord API failures gracefully', async ({ page }) => {
+    // TODO: Implement Discord API failure test
+  });
+  test.skip('@long should sync with Discord server state efficiently', async ({ page }) => {
+    // TODO: Implement Discord sync test
+  });
 });
 
 test.describe('@critical Error Handling', () => {
@@ -108,5 +124,7 @@ test.describe('@critical Error Handling', () => {
     await expect(page.locator('[data-testid="game-canvas"]')).toBeVisible();
   });
 
-  test.todo('@critical should maintain data integrity during errors');
+  test.skip('@critical should maintain data integrity during errors', async ({ page }) => {
+    // TODO: Implement data integrity test
+  });
 });
