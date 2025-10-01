@@ -4,7 +4,7 @@
  */
 
 import { http, HttpResponse } from 'msw';
-import { mockApiResponse, mockGameState } from '../fixtures/mockData.js';
+import { mockApiResponse, mockGameState } from '../fixtures/mockData';
 
 export const apiHandlers = [
   // Mock Discord OAuth endpoint
