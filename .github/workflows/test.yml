@@ -155,12 +155,7 @@ jobs:
             "version": 2,
             "public": true,
             "trailingSlash": false,
-            "routes": [
-              {
-                "src": "/(.*)",
-                "dest": "/$1"
-              }
-            ],
+            "cleanUrls": true,
             "headers": [
               {
                 "source": "/(.*)",
