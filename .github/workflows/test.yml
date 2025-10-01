@@ -115,16 +115,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
         
-      - name: Install Allure CLI
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y openjdk-11-jdk
-          curl -o allure-commandline.tgz -L https://github.com/allure-framework/allure2/releases/download/2.24.0/allure-commandline-2.24.0.tgz
-          tar -zxf allure-commandline.tgz
-          sudo mv allure-2.24.0 /opt/allure
-          sudo ln -s /opt/allure/bin/allure /usr/local/bin/allure
-          allure --version
-        
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -137,7 +127,9 @@ jobs:
           
       - name: Generate Allure report
         run: |
-          allure generate merged-allure-results --clean
+          npm run test:report:generate
+        env:
+          ALLURE_RESULTS_PATH: merged-allure-results
           
       - name: Prepare Vercel deployment
         run: |
