@@ -127,13 +127,16 @@ jobs:
           path: allure-report/
           retention-days: 30
           
-      - name: Deploy Allure report to GitHub Pages
-        if: github.ref == 'refs/heads/main'
-        uses: peaceiris/actions-gh-pages@v3
+      - name: Deploy Allure report to Vercel
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        uses: amondnet/vercel-action@v25
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: allure-report
-          destination_dir: test-reports
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          working-directory: allure-report
+          scope: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-args: '--prod'
 
   test-summary:
     name: Test Summary
