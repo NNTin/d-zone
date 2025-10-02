@@ -47,9 +47,57 @@ function initGame(images: Record<string, HTMLCanvasElement>): void {
     // Initialize Discord OAuth
     initDiscordAuth();
     
-    // Add help button immediately after UI initialization
-    addHelpButton();
-    
+
+    // --- EXTRACTED UI BUTTONS TO HTML ---
+    // Create Help Button outside the canvas
+    let helpBtn = document.getElementById('help-btn') as HTMLButtonElement;
+    if (!helpBtn) {
+        helpBtn = document.createElement('button');
+        helpBtn.id = 'help-btn';
+        helpBtn.textContent = '?';
+        helpBtn.style.position = 'fixed';
+        helpBtn.style.bottom = '16px';
+        helpBtn.style.right = '16px';
+        helpBtn.style.width = '36px';
+        helpBtn.style.height = '36px';
+        helpBtn.style.zIndex = '1000';
+        helpBtn.title = 'Help';
+        document.body.appendChild(helpBtn);
+    }
+    helpBtn.onclick = () => {
+        if (game.helpPanel) {
+            game.helpPanel.remove();
+            delete game.helpPanel;
+            return;
+        }
+        addHelpButton();
+    };
+
+    // --- SERVER LIST BUTTON (example, adapt as needed) ---
+    let serverListBtn = document.getElementById('server-list-btn') as HTMLButtonElement;
+    if (!serverListBtn) {
+        serverListBtn = document.createElement('button');
+        serverListBtn.id = 'server-list-btn';
+        serverListBtn.textContent = 'Servers';
+        serverListBtn.style.position = 'fixed';
+        serverListBtn.style.bottom = '60px';
+        serverListBtn.style.right = '16px';
+        serverListBtn.style.width = '80px';
+        serverListBtn.style.height = '36px';
+        serverListBtn.style.zIndex = '1000';
+        serverListBtn.title = 'Server List';
+        document.body.appendChild(serverListBtn);
+    }
+    serverListBtn.onclick = () => {
+        if (game.serverListPanel) {
+            game.serverListPanel.remove();
+            delete game.serverListPanel;
+            return;
+        }
+        // Aquí deberías llamar a la función que muestra la lista de servidores
+        // Por ejemplo: addServerListPanel();
+    };
+
     // Ensure UI is properly sized after adding the help button
     game.renderer.canvases[0].onResize();
     
