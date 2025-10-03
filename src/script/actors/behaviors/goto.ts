@@ -117,10 +117,21 @@ export default class GoTo {
                     }
                 }
                 
-                //this.attempt = util.randomIntRange(1,4); // Reset adjacent attempts
-                this.actor.destination = finalDestination;
-                this.actor.startMove();
-                this.actor.once('movecomplete', this.boundStartGoTo);
+                // Try to move to the first step suggested by the pathfinder
+                const pathDeltaY = finalDestination.y - this.actor.position.y;
+                const pathDeltaX = finalDestination.x - this.actor.position.x;
+                const pathMoveAttempt = this.actor.tryMove(pathDeltaX, pathDeltaY);
+
+                // THIS IS THE FIX: Only start the move if the path step is valid
+                if (pathMoveAttempt) {
+                    this.actor.destination = pathMoveAttempt;
+                     this.actor.startMove();
+                     this.actor.once('movecomplete', this.boundStartGoTo);
+                } else {
+                // The first step of the path is blocked, so let's try finding a new path
+                this.attempt++;
+                 this.startGoTo();
+        }
             } else { // If no path, try next closest tile
                 this.attempt++;
                 if (this.attempt > 8) { // Prevent infinite recursion
