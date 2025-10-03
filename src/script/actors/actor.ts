@@ -410,6 +410,9 @@ export default class Actor extends WorldObject {
 
         if (game.world.canWalk(destination.x, destination.y)) {
             const walkable = game.world.getHeight(destination.x, destination.y);
+
+            
+
             if (walkable >= 0 && Math.abs(this.position.z - walkable) <= 0.5) {
                 return { x: destination.x, y: destination.y, z: walkable };
             }
@@ -544,6 +547,8 @@ export default class Actor extends WorldObject {
                 }
                 this.unWalkable = false;
                 
+              
+
                 // Move to destination (absolute positioning)
                 this.move(this.destination.x, this.destination.y, this.destination.z, true);
                 this.destination = false;
@@ -562,6 +567,12 @@ export default class Actor extends WorldObject {
     }
 
     move(x: number, y: number, z?: number, absolute?: boolean): void {
+
+        if (x === undefined || y === undefined) {
+        console.error('Actor.move: Received undefined coordinates, move cancelled.', { actor: this.username });
+        return;
+    }
+
         // Validate input parameters
         if (isNaN(x) || isNaN(y) || (typeof z !== 'undefined' && isNaN(z))) {
             console.error('Actor.move: Invalid coordinates provided', {
