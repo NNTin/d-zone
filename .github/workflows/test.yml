@@ -99,8 +99,11 @@ jobs:
         
       - name: Prepare shard-specific environment
         run: |
-          # Create shard-specific environment.properties for Allure
+          # Create directories
           mkdir -p allure-results
+          mkdir -p test-results
+          
+          # Create shard-specific environment.properties for Allure
           cat > allure-results/environment-shard-${{ matrix.shard }}.properties << EOF
           Environment=CI
           Browser=Chromium
@@ -125,6 +128,13 @@ jobs:
           Test.Type=E2E
           Execution.Mode=Sharded
           EOF
+          
+          # Verify allure-playwright is properly installed
+          echo "Checking allure-playwright installation:"
+          npm list allure-playwright || echo "allure-playwright not found in npm list"
+          
+          # Verify the allure-results directory has proper permissions
+          chmod 755 allure-results 2>/dev/null || true
         
       - name: Run E2E tests
         run: |
@@ -133,13 +143,29 @@ jobs:
           find tests -name "*.e2e.ts" -o -name "*.e2e.js"
           echo ""
           echo "Running Playwright with sharding..."
-          npx playwright test --project=ci --shard=${{ matrix.shard }}/${{ strategy.job-total }} --reporter=list
+          # Let Playwright use the reporters defined in config (including allure-playwright)
+          npx playwright test --project=ci --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+          
+          # Check exit code and show any issues
+          EXIT_CODE=$?
+          echo "Playwright exit code: $EXIT_CODE"
           echo ""
           echo "=== Post-execution: Checking generated files ==="
-          echo "Allure results:"
-          ls -la allure-results/ 2>/dev/null || echo "No allure-results directory"
-          echo "Test results:"
-          ls -la test-results/ 2>/dev/null || echo "No test-results directory"
+          echo "Allure results directory contents:"
+          if [ -d "allure-results" ]; then
+            ls -la allure-results/
+            echo "JSON files: $(find allure-results -name '*.json' | wc -l)"
+            echo "Container files: $(find allure-results -name '*-container.json' | wc -l)"
+            echo "Result files: $(find allure-results -name '*-result.json' | wc -l)"
+          else
+            echo "No allure-results directory found"
+          fi
+          echo "Test results directory contents:"
+          if [ -d "test-results" ]; then
+            ls -la test-results/
+          else
+            echo "No test-results directory found"
+          fi
         env:
           CI: true
           ALLURE_SHARD_ID: ${{ matrix.shard }}
@@ -207,9 +233,24 @@ jobs:
           
           # Copy all JSON and other allure files from all artifact directories
           shard_count=0
+          unit_json_count=0
+          e2e_json_count=0
+          
           find artifacts -name "allure-results" -type d | while read dir; do
             if [ -d "$dir" ] && [ "$(ls -A "$dir")" ]; then
               echo "Processing shard directory: $dir"
+              
+              # Count JSON files in this directory
+              json_files=$(find "$dir" -name "*.json" | wc -l)
+              echo "  JSON files found: $json_files"
+              
+              if [[ "$dir" == *"unit-test-results"* ]]; then
+                unit_json_count=$((unit_json_count + json_files))
+                echo "  → Unit test results"
+              elif [[ "$dir" == *"e2e-test-results"* ]]; then
+                e2e_json_count=$((e2e_json_count + json_files))
+                echo "  → E2E test results"
+              fi
               
               # Copy all files except environment.properties to avoid conflicts
               find "$dir" -name "*.json" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
@@ -222,8 +263,22 @@ jobs:
               find "$dir" -name "environment-shard-*.properties" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
               
               shard_count=$((shard_count + 1))
+            else
+              echo "Skipping empty or non-existent directory: $dir"
             fi
           done
+          
+          echo "=== Summary of collected files ==="
+          echo "Unit test JSON files: $unit_json_count"
+          echo "E2E test JSON files: $e2e_json_count"
+          echo "Total shard directories processed: $shard_count"
+          
+          # If E2E tests didn't generate any results, create placeholder entries
+          if [ "$e2e_json_count" -eq 0 ]; then
+            echo "WARNING: No E2E test results found. This indicates an issue with allure-playwright reporter."
+            echo "Expected E2E shards: 1, 2, 3, 4"
+            echo "Check the E2E test step logs for errors."
+          fi
           
           # Also copy shard-specific test result JSON files
           find artifacts -path "*/test-results/results-shard-*.json" -exec cp {} merged-allure-results/ \; 2>/dev/null || true

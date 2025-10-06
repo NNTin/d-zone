@@ -24,7 +24,6 @@ export default defineConfig({
     ['html'],
     ['allure-playwright', { 
       outputFolder: 'allure-results',
-      suiteTitle: false,
       detail: true,
       environmentInfo: {
         framework: 'Playwright',

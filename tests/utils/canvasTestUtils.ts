@@ -194,7 +194,7 @@ export class CanvasGameTestUtils {
    * Simulate mouse hover over coordinates
    */
   async hoverOnCanvas(x: number, y: number): Promise<void> {
-    const canvas = this.page.locator('#main2');
+    const canvas = this.page.locator('#main');
     await canvas.hover({
       position: { x, y }
     });
@@ -204,7 +204,7 @@ export class CanvasGameTestUtils {
    * Simulate click on canvas coordinates
    */
   async clickOnCanvas(x: number, y: number): Promise<void> {
-    const canvas = this.page.locator('#main2');
+    const canvas = this.page.locator('#main');
     await canvas.click({
       position: { x, y }
     });
@@ -306,7 +306,7 @@ export class GameTestDataBuilder {
  */
 export class GameAssertions {
   static async assertCanvasVisible(page: Page): Promise<void> {
-    const canvas = page.locator('#main2');
+    const canvas = page.locator('#main');
     await expect(canvas).toBeVisible();
     
     // Verify canvas has actual dimensions

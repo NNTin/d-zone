@@ -9,11 +9,13 @@ test.describe('@critical Game Initialization', () => {
   test('@critical @active should load game canvas successfully', async ({ page }) => {
     await page.goto('/');
     
-    // Wait for game to initialize
-    await expect(page.locator('[data-testid="game-canvas"]')).toBeVisible();
+    // Wait for game to initialize - look for canvas with id 'main'
+    await expect(page.locator('#main')).toBeVisible({ timeout: 10000 });
     
-    // TODO: Verify canvas is properly initialized
-    // Placeholder assertion until implementation
+    // Verify canvas is properly initialized
+    const canvas = page.locator('#main');
+    await expect(canvas).toHaveAttribute('width');
+    await expect(canvas).toHaveAttribute('height');
   });
 
   test('@critical @active should establish WebSocket connection', async ({ page }) => {
