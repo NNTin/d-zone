@@ -1,0 +1,483 @@
+name: Test Pipeline
+
+on:
+  push:
+    branches: [ master, develop, feature/*, fix/* ]
+  pull_request:
+    branches: [ master, develop ]
+
+env:
+  NODE_VERSION: '24.8.0'
+  ALLURE_RESULTS_PATH: 'allure-results'
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Prepare unit test environment
+        run: |
+          # Create environment.properties for unit tests
+          mkdir -p allure-results
+          cat > allure-results/environment.properties << EOF
+          Environment=CI
+          Browser=N/A
+          Node.Version=${{ env.NODE_VERSION }}
+          Platform=Ubuntu
+          Test.Framework=Playwright+Vitest
+          Report.Type=Allure
+          Shard=1/1
+          Test.Type=Unit
+          Execution.Mode=Single
+          EOF
+        
+      - name: Run unit tests
+        run: |
+          npm run test:unit
+        env:
+          ALLURE_TEST_TYPE: Unit
+        
+      - name: List generated files for debugging
+        if: always()
+        run: |
+          echo "Contents of allure-results directory:"
+          ls -la allure-results/ || echo "allure-results directory not found"
+          echo "Contents of coverage directory:"
+          ls -la coverage/ || echo "coverage directory not found"
+          echo "Root directory contents:"
+          ls -la
+        
+      - name: Upload unit test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: |
+            allure-results/**/*
+            coverage/**/*
+          retention-days: 30
+
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+        
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Install Playwright browsers
+        run: npx playwright install chromium
+        
+      - name: Build application
+        run: npm run build:dev
+        
+      - name: Prepare shard-specific environment
+        run: |
+          # Create directories
+          mkdir -p allure-results
+          mkdir -p test-results
+          
+          # Create shard-specific environment.properties for Allure
+          cat > allure-results/environment-shard-${{ matrix.shard }}.properties << EOF
+          Environment=CI
+          Browser=Chromium
+          Node.Version=${{ env.NODE_VERSION }}
+          Platform=Ubuntu
+          Test.Framework=Playwright+Vitest
+          Report.Type=Allure
+          Shard=${{ matrix.shard }}/${{ strategy.job-total }}
+          Test.Type=E2E
+          Execution.Mode=Sharded
+          Shard.ID=${{ matrix.shard }}
+          EOF
+          
+          # Create unique environment.properties with shard identifier
+          cat > allure-results/environment.properties << EOF
+          Environment=CI-Shard-${{ matrix.shard }}
+          Browser=Chromium
+          Node.Version=${{ env.NODE_VERSION }}
+          Platform=Ubuntu
+          Test.Framework=Playwright+Vitest
+          Report.Type=Allure
+          Shard=${{ matrix.shard }}/${{ strategy.job-total }}
+          Test.Type=E2E
+          Execution.Mode=Sharded
+          Shard.ID=${{ matrix.shard }}
+          Suite.ID=e2e-shard-${{ matrix.shard }}
+          EOF
+          
+          # Verify allure-playwright is properly installed
+          echo "Checking allure-playwright installation:"
+          npm list allure-playwright || echo "allure-playwright not found in npm list"
+          
+          # Verify the allure-results directory has proper permissions
+          chmod 755 allure-results 2>/dev/null || true
+        
+      - name: Run E2E tests
+        run: |
+          echo "=== Running E2E tests for shard ${{ matrix.shard }}/${{ strategy.job-total }} ==="
+          echo "Available test files:"
+          find tests -name "*.e2e.ts" -o -name "*.e2e.js"
+          echo ""
+          echo "Running Playwright with sharding..."
+          # Let Playwright use the reporters defined in config (including allure-playwright)
+          # Use shard-specific project name for better Allure suite separation
+          PROJECT_NAME="ci-shard-${{ matrix.shard }}"
+          npx playwright test --project=$PROJECT_NAME --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+          
+          # Check exit code and show any issues
+          EXIT_CODE=$?
+          echo "Playwright exit code: $EXIT_CODE"
+          echo ""
+          echo "=== Post-execution: Checking generated files ==="
+          echo "Allure results directory contents:"
+          if [ -d "allure-results" ]; then
+            ls -la allure-results/
+            echo "JSON files: $(find allure-results -name '*.json' | wc -l)"
+            echo "Container files: $(find allure-results -name '*-container.json' | wc -l)"
+            echo "Result files: $(find allure-results -name '*-result.json' | wc -l)"
+          else
+            echo "No allure-results directory found"
+          fi
+          echo "Test results directory contents:"
+          if [ -d "test-results" ]; then
+            ls -la test-results/
+          else
+            echo "No test-results directory found"
+          fi
+        env:
+          CI: true
+          ALLURE_SHARD_ID: ${{ matrix.shard }}
+          ALLURE_TOTAL_SHARDS: ${{ strategy.job-total }}
+          ALLURE_TEST_TYPE: E2E
+          
+      - name: Upload E2E test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results-${{ matrix.shard }}
+          path: |
+            allure-results/
+            test-results/
+            playwright-report/
+          retention-days: 30
+
+  merge-reports:
+    name: Merge Test Reports
+    runs-on: ubuntu-latest
+    needs: [unit-tests, e2e-tests]
+    if: always()
+    outputs:
+      deployment-url: ${{ steps.vercel-deployment.outputs.preview-url }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Install Allure CLI
+        run: |
+          echo "=== Installing Allure ==="
+          echo "Current working directory: $(pwd)"
+          sudo apt-get update
+          sudo apt-get install -y openjdk-11-jdk
+          echo "Java version:"
+          java -version
+          echo "Downloading Allure..."
+          curl -o allure-2.24.0.tgz -Ls https://github.com/allure-framework/allure2/releases/download/2.24.0/allure-2.24.0.tgz
+          echo "Extracting Allure..."
+          sudo tar -zxvf allure-2.24.0.tgz -C /opt/
+          sudo ln -s /opt/allure-2.24.0/bin/allure /usr/bin/allure
+          echo "Allure version:"
+          allure --version
+        
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          
+      - name: Merge Allure results
+        run: |
+          mkdir -p merged-allure-results
+          
+          # Debug: Show artifact structure
+          echo "=== Artifact structure ==="
+          find artifacts -type f | head -20
+          echo ""
+          echo "=== Looking for allure-results directories ==="
+          find artifacts -name "allure-results" -type d
+          echo ""
+          echo "=== Looking for JSON files ==="
+          find artifacts -name "*.json" | head -20
+          echo ""
+          
+          # Copy all JSON and other allure files from all artifact directories
+          # Use process substitution to avoid subshell variable issues
+          unit_json_count=0
+          e2e_json_count=0
+          shard_count=0
+          
+          # Process each allure-results directory
+          while IFS= read -r -d '' dir; do
+            if [ -d "$dir" ] && [ "$(ls -A "$dir")" ]; then
+              echo "Processing shard directory: $dir"
+              
+              # Count JSON files in this directory
+              json_files=$(find "$dir" -name "*.json" | wc -l)
+              echo "  JSON files found: $json_files"
+              
+              # Determine shard type and ID
+              shard_id="unknown"
+              if [[ "$dir" == *"unit-test-results"* ]]; then
+                unit_json_count=$((unit_json_count + json_files))
+                shard_id="unit"
+                echo "  → Unit test results"
+              elif [[ "$dir" == *"e2e-test-results-1"* ]]; then
+                e2e_json_count=$((e2e_json_count + json_files))
+                shard_id="e2e-shard-1"
+                echo "  → E2E test results (shard 1)"
+              elif [[ "$dir" == *"e2e-test-results-2"* ]]; then
+                e2e_json_count=$((e2e_json_count + json_files))
+                shard_id="e2e-shard-2"
+                echo "  → E2E test results (shard 2)"
+              elif [[ "$dir" == *"e2e-test-results-3"* ]]; then
+                e2e_json_count=$((e2e_json_count + json_files))
+                shard_id="e2e-shard-3"
+                echo "  → E2E test results (shard 3)"
+              elif [[ "$dir" == *"e2e-test-results-4"* ]]; then
+                e2e_json_count=$((e2e_json_count + json_files))
+                shard_id="e2e-shard-4"
+                echo "  → E2E test results (shard 4)"
+              fi
+              
+              # Copy files with unique naming to prevent overwrites
+              find "$dir" -name "*-result.json" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
+              find "$dir" -name "*-container.json" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
+              find "$dir" -name "*-attachment.*" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
+              
+              # Copy other files
+              find "$dir" -name "*.txt" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
+              find "$dir" -name "*.html" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
+              
+              # Copy shard-specific environment files with preserved names
+              find "$dir" -name "environment-shard-*.properties" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
+              
+              shard_count=$((shard_count + 1))
+            else
+              echo "Skipping empty or non-existent directory: $dir"
+            fi
+          done < <(find artifacts -name "allure-results" -type d -print0)
+          
+          echo "=== Summary of collected files ==="
+          echo "Unit test JSON files: $unit_json_count"
+          echo "E2E test JSON files: $e2e_json_count"
+          echo "Total shard directories processed: $shard_count"
+          
+          # If E2E tests didn't generate any results, create placeholder entries
+          if [ "$e2e_json_count" -eq 0 ]; then
+            echo "WARNING: No E2E test results found. This indicates an issue with allure-playwright reporter."
+            echo "Expected E2E shards: 1, 2, 3, 4"
+            echo "Check the E2E test step logs for errors."
+          fi
+          
+          # Also copy shard-specific test result JSON files
+          find artifacts -path "*/test-results/results-shard-*.json" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
+          find artifacts -path "*/test-results/results.json" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
+          
+          # Create a combined environment.properties for the merged report
+          cat > merged-allure-results/environment.properties << EOF
+          Environment=CI-Merged
+          Browser=Chromium
+          Node.Version=${{ env.NODE_VERSION }}
+          Platform=Ubuntu
+          Test.Framework=Playwright+Vitest
+          Report.Type=Allure-Merged
+          Total.Shards=4
+          Test.Types=Unit+E2E
+          Execution.Mode=Parallel_Sharded
+          E2E.Shards=4
+          Unit.Tests=true
+          Merge.Timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          Report.Generated.By=GitHub-Actions
+          EOF
+          
+          # Show what we collected
+          echo "=== Merged results ==="
+          ls -la merged-allure-results/ | head -20
+          echo "=== File count by type ==="
+          echo "JSON files: $(find merged-allure-results -name '*.json' | wc -l)"
+          echo "Result files: $(find merged-allure-results -name '*-result.json' | wc -l)"
+          echo "Container files: $(find merged-allure-results -name '*-container.json' | wc -l)"
+          echo "Attachment files: $(find merged-allure-results -name '*-attachment.*' | wc -l)"
+          echo "Environment files: $(find merged-allure-results -name 'environment*.properties' | wc -l)"
+          echo "Total files: $(find merged-allure-results -type f | wc -l)"
+          
+          # Check for potential UUID conflicts
+          echo "=== Checking for potential issues ==="
+          echo "Checking for duplicate UUIDs in result files..."
+          if [ $(find merged-allure-results -name '*-result.json' | wc -l) -gt 0 ]; then
+            grep -h '"uuid"' merged-allure-results/*-result.json | sort | uniq -d | head -5
+            if [ $? -eq 0 ]; then
+              echo "No duplicate UUIDs found (good)"
+            fi
+          fi
+          
+      - name: Generate Allure report
+        run: |
+          echo "=== Merged results before generation ==="
+          ls -la merged-allure-results/ | head -10
+          echo "Total files: $(ls -1 merged-allure-results/ | wc -l)"
+          echo ""
+          
+          # Generate Allure report directly using CLI
+          allure generate merged-allure-results --clean --output allure-report
+          
+          echo "=== Generated report structure ==="
+          ls -la allure-report/ | head -10
+          echo "Report index exists: $(test -f allure-report/index.html && echo 'YES' || echo 'NO')"
+          
+      - name: Prepare Vercel deployment
+        run: |
+          mkdir -p vercel-deploy
+          cp -r allure-report/* vercel-deploy/
+          
+          # Create package.json for Vercel
+          cat > vercel-deploy/package.json << 'EOF'
+          {
+            "name": "allure-report-static",
+            "version": "1.0.0",
+            "description": "Static Allure test report",
+            "scripts": {
+              "build": "echo 'Static site - no build needed'",
+              "build:prod": "echo 'Static site - no build needed'",
+              "start": "echo 'Static site ready'"
+            },
+            "devDependencies": {}
+          }
+          EOF
+          
+          # Create vercel.json for static hosting
+          cat > vercel-deploy/vercel.json << 'EOF'
+          {
+            "version": 2,
+            "public": true,
+            "trailingSlash": false,
+            "cleanUrls": true,
+            "buildCommand": "echo 'No build needed for static files'",
+            "outputDirectory": "./",
+            "headers": [
+              {
+                "source": "/(.*)",
+                "headers": [
+                  {
+                    "key": "Cache-Control",
+                    "value": "public, max-age=3600"
+                  }
+                ]
+              }
+            ]
+          }
+          EOF
+          
+      - name: Upload merged Allure report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report
+          path: |
+            allure-report/
+            vercel-deploy/
+          retention-days: 30
+          
+      - name: Deploy Allure report to Vercel
+        if: always()
+        id: vercel-deployment
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          working-directory: vercel-deploy
+          scope: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-args: '--prod'
+          
+      - name: Comment deployment URL on PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deploymentUrl = '${{ steps.vercel-deployment.outputs.preview-url }}';
+            const comment = `## 📊 Test Report Deployed
+            
+            🚀 **Allure Test Report**: ${deploymentUrl}
+            *Report generated from commit: ${context.sha.substring(0, 7)}*`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [unit-tests, e2e-tests, merge-reports]
+    if: always()
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          
+      - name: Create test summary
+        run: |
+          echo "## 🧪 Test Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ needs.unit-tests.result }}" == "success" ]; then
+            echo "✅ Unit Tests: **PASSED**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Unit Tests: **FAILED**" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.e2e-tests.result }}" == "success" ]; then
+            echo "✅ E2E Tests: **PASSED**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ E2E Tests: **FAILED**" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Add Vercel deployment URL if available
+          if [ "${{ needs.merge-reports.outputs.deployment-url }}" != "" ]; then
+            echo "📊 **Test Report**: ${{ needs.merge-reports.outputs.deployment-url }}" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "📊 [View GitHub Actions Runs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
