@@ -147,7 +147,9 @@ jobs:
           echo ""
           echo "Running Playwright with sharding..."
           # Let Playwright use the reporters defined in config (including allure-playwright)
-          npx playwright test --project=ci --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+          # Use shard-specific project name for better Allure suite separation
+          PROJECT_NAME="ci-shard-${{ matrix.shard }}"
+          npx playwright test --project=$PROJECT_NAME --shard=${{ matrix.shard }}/${{ strategy.job-total }}
           
           # Check exit code and show any issues
           EXIT_CODE=$?

@@ -64,8 +64,9 @@ export default defineConfig({
       grepInvert: /@inactive/,
     },
     
+    // CI projects with shard-specific names for better Allure reporting
     {
-      name: 'ci',
+      name: process.env.ALLURE_SHARD_ID ? `ci-shard-${process.env.ALLURE_SHARD_ID}` : 'ci',
       use: { ...devices['Desktop Chrome'] },
       grep: /@critical|@normal|@long|@active/,
       grepInvert: /@inactive/,
