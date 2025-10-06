@@ -32,6 +32,12 @@
     "vitest": "^1.6.0"
   },
   "scripts": {
+    "build:dev": "esbuild src/main.ts --bundle --sourcemap --outfile=dist/static/bundle.js --format=iife --platform=browser --target=es2020 --define:global=window --external:fs --external:path",
+    "build:prod": "esbuild src/main.ts --bundle --minify --outfile=dist/static/bundle.js --format=iife --platform=browser --target=es2020 --define:global=window --external:fs --external:path",
+    "dev": "concurrently \"npm run watch\" \"npm start\"",
+    "prestart": "npm run build:dev",
+    "start": "node server.mjs",
+    "start:ts": "ts-node --esm index.ts",
     "test": "vitest run && playwright test",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
@@ -42,14 +48,8 @@
     "test:ci": "npm run test -- --project=ci",
     "test:report": "allure generate --clean && allure open",
     "test:report:generate": "allure generate --clean",
-    "build:dev": "esbuild src/main.ts --bundle --sourcemap --outfile=dist/static/bundle.js --format=iife --platform=browser --target=es2020 --define:global=window --external:fs --external:path",
-    "build:prod": "esbuild src/main.ts --bundle --minify --outfile=dist/static/bundle.js --format=iife --platform=browser --target=es2020 --define:global=window --external:fs --external:path",
-    "watch": "esbuild src/main.ts --bundle --sourcemap --outfile=dist/static/bundle.js --format=iife --platform=browser --target=es2020 --define:global=window --external:fs --external:path --watch",
     "type-check": "tsc --noEmit",
-    "prestart": "npm run build:dev",
-    "start": "node server.mjs",
-    "start:ts": "ts-node --esm index.ts",
-    "dev": "concurrently \"npm run watch\" \"npm start\""
+    "watch": "esbuild src/main.ts --bundle --sourcemap --outfile=dist/static/bundle.js --format=iife --platform=browser --target=es2020 --define:global=window --external:fs --external:path --watch"
   },
   "repository": {
     "type": "git",
