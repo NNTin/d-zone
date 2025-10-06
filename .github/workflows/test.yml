@@ -101,6 +101,19 @@ jobs:
         run: |
           # Create shard-specific environment.properties for Allure
           mkdir -p allure-results
+          cat > allure-results/environment-shard-${{ matrix.shard }}.properties << EOF
+          Environment=CI
+          Browser=Chromium
+          Node.Version=${{ env.NODE_VERSION }}
+          Platform=Ubuntu
+          Test.Framework=Playwright+Vitest
+          Report.Type=Allure
+          Shard=${{ matrix.shard }}/${{ strategy.job-total }}
+          Test.Type=E2E
+          Execution.Mode=Sharded
+          EOF
+          
+          # Also create a general environment.properties with shard info
           cat > allure-results/environment.properties << EOF
           Environment=CI
           Browser=Chromium
@@ -114,7 +127,19 @@ jobs:
           EOF
         
       - name: Run E2E tests
-        run: npx playwright test --project=ci --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+        run: |
+          echo "=== Running E2E tests for shard ${{ matrix.shard }}/${{ strategy.job-total }} ==="
+          echo "Available test files:"
+          find tests -name "*.e2e.ts" -o -name "*.e2e.js"
+          echo ""
+          echo "Running Playwright with sharding..."
+          npx playwright test --project=ci --shard=${{ matrix.shard }}/${{ strategy.job-total }} --reporter=list
+          echo ""
+          echo "=== Post-execution: Checking generated files ==="
+          echo "Allure results:"
+          ls -la allure-results/ 2>/dev/null || echo "No allure-results directory"
+          echo "Test results:"
+          ls -la test-results/ 2>/dev/null || echo "No test-results directory"
         env:
           CI: true
           ALLURE_SHARD_ID: ${{ matrix.shard }}
@@ -177,25 +202,54 @@ jobs:
           find artifacts -name "allure-results" -type d
           echo ""
           echo "=== Looking for JSON files ==="
-          find artifacts -name "*.json" | head -10
+          find artifacts -name "*.json" | head -20
           echo ""
           
           # Copy all JSON and other allure files from all artifact directories
+          shard_count=0
           find artifacts -name "allure-results" -type d | while read dir; do
             if [ -d "$dir" ] && [ "$(ls -A "$dir")" ]; then
-              echo "Copying from: $dir"
-              cp -r "$dir"/* merged-allure-results/ 2>/dev/null || true
+              echo "Processing shard directory: $dir"
+              
+              # Copy all files except environment.properties to avoid conflicts
+              find "$dir" -name "*.json" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
+              find "$dir" -name "*.txt" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
+              find "$dir" -name "*.png" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
+              find "$dir" -name "*.html" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
+              find "$dir" -name "*-attachment.*" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
+              
+              # Copy shard-specific environment files with preserved names
+              find "$dir" -name "environment-shard-*.properties" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
+              
+              shard_count=$((shard_count + 1))
             fi
           done
           
-          # Also copy any loose allure files that might be directly in artifact folders
-          find artifacts -name "*-result.json" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
-          find artifacts -name "*-container.json" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
-          find artifacts -name "*-attachment.*" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
+          # Also copy shard-specific test result JSON files
+          find artifacts -path "*/test-results/results-shard-*.json" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
+          find artifacts -path "*/test-results/results.json" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
+          
+          # Create a combined environment.properties for the merged report
+          cat > merged-allure-results/environment.properties << EOF
+          Environment=CI
+          Browser=Chromium
+          Node.Version=${{ env.NODE_VERSION }}
+          Platform=Ubuntu
+          Test.Framework=Playwright+Vitest
+          Report.Type=Allure
+          Shards.Total=4
+          Test.Types=Unit+E2E
+          Execution.Mode=Parallel_Sharded
+          Merge.Timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          EOF
           
           # Show what we collected
           echo "=== Merged results ==="
-          ls -la merged-allure-results/ | head -10
+          ls -la merged-allure-results/ | head -20
+          echo "=== File count by type ==="
+          echo "JSON files: $(find merged-allure-results -name '*.json' | wc -l)"
+          echo "Environment files: $(find merged-allure-results -name 'environment*.properties' | wc -l)"
+          echo "Total files: $(find merged-allure-results -type f | wc -l)"
           
       - name: Generate Allure report
         run: |
