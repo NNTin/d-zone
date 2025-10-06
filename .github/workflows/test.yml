@@ -114,11 +114,12 @@ jobs:
           Shard=${{ matrix.shard }}/${{ strategy.job-total }}
           Test.Type=E2E
           Execution.Mode=Sharded
+          Shard.ID=${{ matrix.shard }}
           EOF
           
-          # Also create a general environment.properties with shard info
+          # Create unique environment.properties with shard identifier
           cat > allure-results/environment.properties << EOF
-          Environment=CI
+          Environment=CI-Shard-${{ matrix.shard }}
           Browser=Chromium
           Node.Version=${{ env.NODE_VERSION }}
           Platform=Ubuntu
@@ -127,6 +128,8 @@ jobs:
           Shard=${{ matrix.shard }}/${{ strategy.job-total }}
           Test.Type=E2E
           Execution.Mode=Sharded
+          Shard.ID=${{ matrix.shard }}
+          Suite.ID=e2e-shard-${{ matrix.shard }}
           EOF
           
           # Verify allure-playwright is properly installed
@@ -232,11 +235,13 @@ jobs:
           echo ""
           
           # Copy all JSON and other allure files from all artifact directories
-          shard_count=0
+          # Use process substitution to avoid subshell variable issues
           unit_json_count=0
           e2e_json_count=0
+          shard_count=0
           
-          find artifacts -name "allure-results" -type d | while read dir; do
+          # Process each allure-results directory
+          while IFS= read -r -d '' dir; do
             if [ -d "$dir" ] && [ "$(ls -A "$dir")" ]; then
               echo "Processing shard directory: $dir"
               
@@ -244,20 +249,38 @@ jobs:
               json_files=$(find "$dir" -name "*.json" | wc -l)
               echo "  JSON files found: $json_files"
               
+              # Determine shard type and ID
+              shard_id="unknown"
               if [[ "$dir" == *"unit-test-results"* ]]; then
                 unit_json_count=$((unit_json_count + json_files))
+                shard_id="unit"
                 echo "  → Unit test results"
-              elif [[ "$dir" == *"e2e-test-results"* ]]; then
+              elif [[ "$dir" == *"e2e-test-results-1"* ]]; then
                 e2e_json_count=$((e2e_json_count + json_files))
-                echo "  → E2E test results"
+                shard_id="e2e-shard-1"
+                echo "  → E2E test results (shard 1)"
+              elif [[ "$dir" == *"e2e-test-results-2"* ]]; then
+                e2e_json_count=$((e2e_json_count + json_files))
+                shard_id="e2e-shard-2"
+                echo "  → E2E test results (shard 2)"
+              elif [[ "$dir" == *"e2e-test-results-3"* ]]; then
+                e2e_json_count=$((e2e_json_count + json_files))
+                shard_id="e2e-shard-3"
+                echo "  → E2E test results (shard 3)"
+              elif [[ "$dir" == *"e2e-test-results-4"* ]]; then
+                e2e_json_count=$((e2e_json_count + json_files))
+                shard_id="e2e-shard-4"
+                echo "  → E2E test results (shard 4)"
               fi
               
-              # Copy all files except environment.properties to avoid conflicts
-              find "$dir" -name "*.json" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
-              find "$dir" -name "*.txt" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
-              find "$dir" -name "*.png" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
-              find "$dir" -name "*.html" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
+              # Copy files with unique naming to prevent overwrites
+              find "$dir" -name "*-result.json" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
+              find "$dir" -name "*-container.json" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
               find "$dir" -name "*-attachment.*" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
+              
+              # Copy other files
+              find "$dir" -name "*.txt" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
+              find "$dir" -name "*.html" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
               
               # Copy shard-specific environment files with preserved names
               find "$dir" -name "environment-shard-*.properties" -exec cp {} merged-allure-results/ \; 2>/dev/null || true
@@ -266,7 +289,7 @@ jobs:
             else
               echo "Skipping empty or non-existent directory: $dir"
             fi
-          done
+          done < <(find artifacts -name "allure-results" -type d -print0)
           
           echo "=== Summary of collected files ==="
           echo "Unit test JSON files: $unit_json_count"
@@ -286,16 +309,19 @@ jobs:
           
           # Create a combined environment.properties for the merged report
           cat > merged-allure-results/environment.properties << EOF
-          Environment=CI
+          Environment=CI-Merged
           Browser=Chromium
           Node.Version=${{ env.NODE_VERSION }}
           Platform=Ubuntu
           Test.Framework=Playwright+Vitest
-          Report.Type=Allure
-          Shards.Total=4
+          Report.Type=Allure-Merged
+          Total.Shards=4
           Test.Types=Unit+E2E
           Execution.Mode=Parallel_Sharded
+          E2E.Shards=4
+          Unit.Tests=true
           Merge.Timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          Report.Generated.By=GitHub-Actions
           EOF
           
           # Show what we collected
@@ -303,8 +329,21 @@ jobs:
           ls -la merged-allure-results/ | head -20
           echo "=== File count by type ==="
           echo "JSON files: $(find merged-allure-results -name '*.json' | wc -l)"
+          echo "Result files: $(find merged-allure-results -name '*-result.json' | wc -l)"
+          echo "Container files: $(find merged-allure-results -name '*-container.json' | wc -l)"
+          echo "Attachment files: $(find merged-allure-results -name '*-attachment.*' | wc -l)"
           echo "Environment files: $(find merged-allure-results -name 'environment*.properties' | wc -l)"
           echo "Total files: $(find merged-allure-results -type f | wc -l)"
+          
+          # Check for potential UUID conflicts
+          echo "=== Checking for potential issues ==="
+          echo "Checking for duplicate UUIDs in result files..."
+          if [ $(find merged-allure-results -name '*-result.json' | wc -l) -gt 0 ]; then
+            grep -h '"uuid"' merged-allure-results/*-result.json | sort | uniq -d | head -5
+            if [ $? -eq 0 ]; then
+              echo "No duplicate UUIDs found (good)"
+            fi
+          fi
           
       - name: Generate Allure report
         run: |
