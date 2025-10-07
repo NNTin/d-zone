@@ -4,7 +4,6 @@
     "dockerfile": "Dockerfile",
     "context": ".."
   },
-
   "workspaceFolder": "/workspace/app",
 
   "customizations": {
@@ -21,46 +20,22 @@
         "formulahendry.auto-rename-tag",
         "christian-kohler.path-intellisense",
         "ms-vscode.vscode-eslint"
-      ],
-      "settings": {
-        "typescript.preferences.importModuleSpecifier": "relative",
-        "typescript.suggest.autoImports": true,
-        "editor.formatOnSave": true,
-        "editor.codeActionsOnSave": {
-          "source.fixAll.eslint": "explicit"
-        },
-        "files.exclude": {
-          "**/node_modules": true,
-          "**/dist": true,
-          "**/allure-results": true,
-          "**/allure-report": true,
-          "**/test-results": true,
-          "**/playwright-report": true
-        }
-      }
+      ]
     }
   },
 
   "forwardPorts": [8080, 3000],
-  "portsAttributes": {
-    "8080": {
-      "label": "D-Zone App",
-      "onAutoForward": "notify"
-    },
-    "3000": {
-      "label": "Dev Server",
-      "onAutoForward": "silent"
-    }
-  },
 
   "postCreateCommand": "cd /workspace/app && npm install",
-  "postStartCommand": "echo 'D-Zone development environment ready! Run npm run dev to start.'",
 
   "remoteUser": "node",
 
   "mounts": [
+    // ✅ Mount entire project (including package.json, etc.)
     "source=${localWorkspaceFolder},target=/workspace/app,type=bind,consistency=cached",
-    "source=dzone_node_modules,target=/workspace/node_modules,type=volume"
+    
+    // ✅ Mount node_modules as a separate volume, and prevent host version from leaking in
+    "source=dzone_node_modules,target=/workspace/app/node_modules,type=volume,volume-opt=o=nocopy"
   ],
 
   "containerEnv": {

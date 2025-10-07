@@ -12,8 +12,14 @@ RUN apt-get update && apt-get install -y \
     libatspi2.0-0 libgtk-3-0 procps \
     && rm -rf /var/lib/apt/lists/*
 
+# install sudo
+RUN apt-get update && apt-get install -y sudo && rm -rf /var/lib/apt/lists/*
+
 # Create a home directory for node if it doesn't exist
 RUN mkdir -p /home/node && chown -R node:node /home/node
+
+# Ensure node_modules directory exists and owned by node
+RUN mkdir -p /workspace/app/node_modules && chown -R node:node /workspace/app/node_modules
 
 # Switch to node for development
 USER node
