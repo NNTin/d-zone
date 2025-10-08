@@ -1,15 +1,15 @@
 'use strict';
 
-import { util } from './script/common/util.js';
-import Preloader from './script/engine/preloader.js';
-import Game from './script/engine/game.js';
-import DiscordOAuth from './script/auth/discord-oauth.js';
-import Renderer from './script/engine/renderer.js';
-import Canvas from './script/engine/canvas.js';
-import UI from './script/ui/ui.js';
-import World from './script/environment/world.js';
 import Users from './script/actors/users.js';
+import DiscordOAuth from './script/auth/discord-oauth.js';
+import { util } from './script/common/util.js';
+import Canvas from './script/engine/canvas.js';
+import Game from './script/engine/game.js';
+import Preloader from './script/engine/preloader.js';
+import Renderer from './script/engine/renderer.js';
+import World from './script/environment/world.js';
 import Decorator from './script/props/decorator.js';
+import UI from './script/ui/ui.js';
 
 // Import package.json for version information
 // @ts-ignore - esbuild will handle this
@@ -22,10 +22,8 @@ let game: Game;
 let ws: WebSocket;
 let discordAuth: DiscordOAuth;
 
-// TODO: Loading screen while preloading images, connecting to websocket, and generating world
-console.log('Loading...');
-version = packageInfo.version;
-preloader = new Preloader(initGame);
+// Export for testing
+export { discordAuth, game, ws };
 
 function initGame(images: Record<string, HTMLCanvasElement>): void {
     // Use direct imports since these modules will be available  
@@ -205,7 +203,7 @@ function addHelpButton(): void {
             }
             
             game.helpPanel = game.ui.addPanel({ left: 'auto', top: 'auto', w: 200, h: 130 });
-            game.ui.addLabel({ text: 'D-Zone (fork) ' + version, top: 5, left: 'auto', parent: game.helpPanel });
+            game.ui.addLabel({ text: 'D-Zone (fork) ' + (version || packageInfo.version), top: 5, left: 'auto', parent: game.helpPanel });
             game.ui.addLabel({
                 text: packageInfo.description, 
                 top: 20, 
@@ -295,7 +293,7 @@ function addHelpButton(): void {
     });
 }
 
-function initWebsocket(): void {
+export function initWebsocket(): void {
     // Initialize the game components now that they're properly imported
     let users: Users, world: World | undefined, decorator: Decorator | undefined;
 
@@ -572,7 +570,7 @@ function initWebsocket(): void {
     joinServer(server);
 };
 
-function joinServer(server: { id: string }): void {
+export function joinServer(server: { id: string }): void {
     const connectionMessage: any = { type: 'connect', data: { server: server.id } };
     
     // Find the server data by looking through all servers for matching ID
@@ -613,7 +611,7 @@ function joinServer(server: { id: string }): void {
     ws.send(JSON.stringify(connectionMessage));
 }
 
-function getStartupServer(): { id: string } {
+export function getStartupServer(): { id: string } {
     // Get startup server, first checking URL params, then localstorage
     let startupServer: any = { id: util.getURLParameter('s') }; // Check URL params
     if (!startupServer.id) {
@@ -626,3 +624,19 @@ function getStartupServer(): { id: string } {
 }
 
 //setTimeout(function() { game.paused = true; },1000);
+
+// Export util for testing
+export { util };
+
+// Main app initialization function - call this to start the app
+export function startApp(): void {
+    // TODO: Loading screen while preloading images, connecting to websocket, and generating world
+    console.log('Loading...');
+    version = packageInfo.version;
+    preloader = new Preloader(initGame);
+}
+
+// Auto-start the app if this module is being run in the browser (not being imported for testing)
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+    startApp();
+}
