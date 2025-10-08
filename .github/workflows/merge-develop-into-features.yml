@@ -47,25 +47,32 @@ jobs:
             count=0
           else
             echo "Found feature branches: $branches"
-            # Convert each line to a JSON array element
-            json=$(echo "$branches" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+            # Convert each line to a JSON array element, ensuring proper JSON format
+            json=$(printf '%s\n' "$branches" | jq -R -s -c 'split("\n") | map(select(length > 0))')
             count=$(echo "$json" | jq 'length')
             echo "Generated JSON: $json"
+            echo "Count: $count"
           fi
 
-          echo "Found $count feature branches"
+          echo "Final: Found $count feature branches"
+          echo "Final JSON: $json"
           echo "matrix=$json" >> $GITHUB_OUTPUT
           echo "count=$count" >> $GITHUB_OUTPUT
 
   merge-into-feature:
-    name: Merge develop into feature branches
+    name: Merge develop into ${{ matrix.branch }}
     needs: list-feature-branches
-    if: needs.list-feature-branches.outputs.count != '0'
+    if: needs.list-feature-branches.outputs.count > 0
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: ${{ fromJson(needs.list-feature-branches.outputs.matrix) }}
     steps:
-      - name: Checkout code
+      - name: Checkout feature branch
         uses: actions/checkout@v4
         with:
+          ref: ${{ matrix.branch }}
           fetch-depth: 0
 
       - name: Set up Git config
@@ -73,58 +80,93 @@ jobs:
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
 
-      - name: Process all feature branches
+      - name: Fetch develop branch
+        run: git fetch origin develop
+
+      - name: Attempt to merge develop into ${{ matrix.branch }}
+        id: merge
         run: |
-          echo "Processing feature branches..."
-          branches='${{ needs.list-feature-branches.outputs.matrix }}'
-          echo "Branches JSON: $branches"
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
+
+          # Try the merge
+          echo "Attempting to merge develop into ${{ matrix.branch }}"
           
-          # Parse the JSON array and process each branch
-          echo "$branches" | jq -r '.[]' | while read -r branch; do
-            echo "Processing branch: $branch"
-            
-            # Checkout the feature branch
-            git checkout "$branch" || {
-              echo "Failed to checkout $branch, trying to fetch it first"
-              git fetch origin "$branch:$branch"
-              git checkout "$branch"
-            }
-            
-            # Fetch latest develop
-            git fetch origin develop
-            
-            # Try to merge develop
-            git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
-            
-            # Attempt merge
-            if git merge origin/develop --no-commit --no-ff; then
-              # Check if merge is needed
-              if git diff --cached --quiet; then
-                echo "$branch: Branch is already up to date with develop."
-              else
-                echo "$branch: Successfully merged develop into branch."
-                git commit -m "Merge branch 'develop' into $branch [auto-merge]"
-                git push origin HEAD:$branch
-                echo "$branch: Pushed merged changes."
-              fi
+          if git merge origin/develop --no-commit --no-ff; then
+            # Check if there are any changes to commit
+            if git diff --cached --quiet; then
+              echo "Branch ${{ matrix.branch }} is already up to date with develop."
+              echo "merge_needed=false" >> $GITHUB_OUTPUT
+              echo "status=up_to_date" >> $GITHUB_OUTPUT
             else
-              echo "$branch: Merge conflict detected when merging develop."
-              git merge --abort
+              echo "Successfully merged develop into ${{ matrix.branch }}."
+              echo "merge_needed=true" >> $GITHUB_OUTPUT
+              echo "status=merged" >> $GITHUB_OUTPUT
             fi
-            
-            echo "---"
-          done
+          else
+            echo "Merge conflict detected when merging develop into ${{ matrix.branch }}."
+            git merge --abort
+            echo "merge_needed=false" >> $GITHUB_OUTPUT
+            echo "status=conflict" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Commit and push the merge
+        if: steps.merge.outputs.merge_needed == 'true'
+        run: |
+          git commit -m "Merge branch 'develop' into ${{ matrix.branch }} [auto-merge]"
+          git push origin HEAD:${{ matrix.branch }}
+          echo "Successfully pushed merge to ${{ matrix.branch }}"
+
+      - name: Show result
+        run: |
+          case "${{ steps.merge.outputs.status }}" in
+            "up_to_date")
+              echo "✅ ${{ matrix.branch }}: Already up to date with develop"
+              ;;
+            "merged")
+              echo "✅ ${{ matrix.branch }}: Successfully merged and pushed develop"
+              ;;
+            "conflict")
+              echo "❌ ${{ matrix.branch }}: Merge conflict detected"
+              ;;
+            *)
+              echo "❓ ${{ matrix.branch }}: Unknown status"
+              ;;
+          esac
 
   summarize:
     name: Summarize Merge Results
     needs: [list-feature-branches, merge-into-feature]
-    if: always() && needs.list-feature-branches.outputs.count != '0'
+    if: always() && needs.list-feature-branches.outputs.count > 0
     runs-on: ubuntu-latest
     steps:
       - name: Write merge summary
         run: |
           echo "### Merge Results Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "The results for merging \`develop\` into all \`feature/*\` branches are shown above." >> $GITHUB_STEP_SUMMARY
+          echo "Processed ${{ needs.list-feature-branches.outputs.count }} feature branches:" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- Processed ${{ needs.list-feature-branches.outputs.count }} feature branches" >> $GITHUB_STEP_SUMMARY
+          
+          # Add information about the matrix jobs
+          if [ "${{ needs.merge-into-feature.result }}" = "success" ]; then
+            echo "✅ All merge operations completed successfully" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.merge-into-feature.result }}" = "failure" ]; then
+            echo "❌ Some merge operations failed (likely due to conflicts)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Merge operations completed with mixed results" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check individual job outputs above for detailed results per branch." >> $GITHUB_STEP_SUMMARY
+
+  no-feature-branches:
+    name: No feature branches found
+    needs: list-feature-branches
+    if: needs.list-feature-branches.outputs.count == 0
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report no branches
+        run: |
+          echo "### No Feature Branches Found" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "No feature branches were found to merge develop into." >> $GITHUB_STEP_SUMMARY
