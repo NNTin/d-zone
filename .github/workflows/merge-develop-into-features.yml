@@ -1,0 +1,235 @@
+name: Merge develop into feature branches
+
+on:
+  push:
+    branches:
+      - develop
+      - feature/merge_develop_into_feature
+
+permissions:
+  contents: write  # Needed to push merged changes back to branches
+
+jobs:
+  detect-source-branch:
+    name: Detect source branch
+    runs-on: ubuntu-latest
+    outputs:
+      source_branch: ${{ steps.detect.outputs.source_branch }}
+      is_develop: ${{ steps.detect.outputs.is_develop }}
+    steps:
+      - name: Detect pushed branch
+        id: detect
+        run: |
+          source_branch="${{ github.ref_name }}"
+          echo "Detected pushed branch: $source_branch"
+          
+          if [ "$source_branch" = "develop" ]; then
+            is_develop="true"
+          else
+            is_develop="false"
+          fi
+          
+          echo "source_branch=$source_branch" >> $GITHUB_OUTPUT
+          echo "is_develop=$is_develop" >> $GITHUB_OUTPUT
+          echo "Source branch: $source_branch"
+          echo "Is develop: $is_develop"
+
+  list-feature-branches:
+    name: List feature branches
+    needs: detect-source-branch
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.list.outputs.matrix }}
+      count: ${{ steps.list.outputs.count }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for all branches
+
+      - name: List feature branches
+        id: list
+        run: |
+          source_branch="${{ needs.detect-source-branch.outputs.source_branch }}"
+          echo "Source branch for merging: $source_branch"
+          
+          # First, let's debug what we can see
+          echo "=== Debugging remote branches ==="
+          echo "All remote branches:"
+          git branch -r
+          echo ""
+          echo "Remote feature branches with ls-remote:"
+          git ls-remote --heads origin
+          echo ""
+          echo "Filtering for feature branches:"
+          git ls-remote --heads origin | grep "refs/heads/feature/"
+          echo "=== End debug ==="
+          
+          # Get remote branches starting with 'feature/', excluding the source branch if it's a feature branch
+          all_feature_branches=$(git ls-remote --heads origin | grep "refs/heads/feature/" | awk '{print $2}' | sed 's#refs/heads/##')
+          
+          # Filter out the source branch if it's a feature branch to avoid self-merge
+          if [[ "$source_branch" == feature/* ]]; then
+            echo "Source branch is a feature branch, excluding it from target list"
+            branches=$(echo "$all_feature_branches" | grep -v "^$source_branch$" || true)
+          else
+            branches="$all_feature_branches"
+          fi
+
+          # Convert to JSON array, ensuring we always have a valid array
+          if [ -z "$branches" ]; then
+            echo "No target feature branches found"
+            json='[]'
+            count=0
+          else
+            echo "Found target feature branches: $branches"
+            # Convert each line to a JSON array element, ensuring proper JSON format
+            json=$(printf '%s\n' "$branches" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+            count=$(echo "$json" | jq 'length')
+            echo "Generated JSON: $json"
+            echo "Count: $count"
+          fi
+
+          echo "Final: Found $count target feature branches"
+          echo "Final JSON: $json"
+          echo "matrix=$json" >> $GITHUB_OUTPUT
+          echo "count=$count" >> $GITHUB_OUTPUT
+
+  merge-into-feature:
+    name: Merge ${{ needs.detect-source-branch.outputs.source_branch }} into ${{ matrix.branch }}
+    needs: [detect-source-branch, list-feature-branches]
+    if: needs.list-feature-branches.outputs.count > 0
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: ${{ fromJson(needs.list-feature-branches.outputs.matrix) }}
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.branch }}
+          fetch-depth: 0
+
+      - name: Set up Git config
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+      - name: Fetch source branch
+        run: |
+          source_branch="${{ needs.detect-source-branch.outputs.source_branch }}"
+          echo "Fetching source branch: $source_branch"
+          git fetch origin $source_branch
+
+      - name: Attempt to merge ${{ needs.detect-source-branch.outputs.source_branch }} into ${{ matrix.branch }}
+        id: merge
+        run: |
+          source_branch="${{ needs.detect-source-branch.outputs.source_branch }}"
+          target_branch="${{ matrix.branch }}"
+          
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
+
+          # Try the merge
+          echo "Attempting to merge $source_branch into $target_branch"
+          
+          if git merge origin/$source_branch --no-commit --no-ff; then
+            # Check if there are any changes to commit
+            if git diff --cached --quiet; then
+              echo "Branch $target_branch is already up to date with $source_branch."
+              echo "merge_needed=false" >> $GITHUB_OUTPUT
+              echo "status=up_to_date" >> $GITHUB_OUTPUT
+            else
+              echo "Successfully merged $source_branch into $target_branch."
+              echo "merge_needed=true" >> $GITHUB_OUTPUT
+              echo "status=merged" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "Merge conflict detected when merging $source_branch into $target_branch."
+            git merge --abort
+            echo "merge_needed=false" >> $GITHUB_OUTPUT
+            echo "status=conflict" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Commit and push the merge
+        if: steps.merge.outputs.merge_needed == 'true'
+        run: |
+          source_branch="${{ needs.detect-source-branch.outputs.source_branch }}"
+          target_branch="${{ matrix.branch }}"
+          
+          git commit -m "Merge branch '$source_branch' into $target_branch [auto-merge]"
+          git push origin HEAD:$target_branch
+          echo "Successfully pushed merge to $target_branch"
+
+      - name: Show result
+        run: |
+          source_branch="${{ needs.detect-source-branch.outputs.source_branch }}"
+          target_branch="${{ matrix.branch }}"
+          
+          case "${{ steps.merge.outputs.status }}" in
+            "up_to_date")
+              echo "✅ $target_branch: Already up to date with $source_branch"
+              ;;
+            "merged")
+              echo "✅ $target_branch: Successfully merged and pushed $source_branch"
+              ;;
+            "conflict")
+              echo "❌ $target_branch: Merge conflict detected with $source_branch"
+              ;;
+            *)
+              echo "❓ $target_branch: Unknown status"
+              ;;
+          esac
+
+  summarize:
+    name: Summarize Merge Results
+    needs: [detect-source-branch, list-feature-branches, merge-into-feature]
+    if: always() && needs.list-feature-branches.outputs.count > 0
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write merge summary
+        run: |
+          source_branch="${{ needs.detect-source-branch.outputs.source_branch }}"
+          
+          echo "### Merge Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Source Branch:** \`$source_branch\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Processed ${{ needs.list-feature-branches.outputs.count }} feature branches:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Add information about the matrix jobs
+          if [ "${{ needs.merge-into-feature.result }}" = "success" ]; then
+            echo "✅ All merge operations completed successfully" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.merge-into-feature.result }}" = "failure" ]; then
+            echo "❌ Some merge operations failed (likely due to conflicts)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Merge operations completed with mixed results" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check individual job outputs above for detailed results per branch." >> $GITHUB_STEP_SUMMARY
+
+  no-feature-branches:
+    name: No feature branches found
+    needs: [detect-source-branch, list-feature-branches]
+    if: needs.list-feature-branches.outputs.count == 0
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report no branches
+        run: |
+          source_branch="${{ needs.detect-source-branch.outputs.source_branch }}"
+          
+          echo "### No Target Feature Branches Found" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Source Branch:** \`$source_branch\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ "$source_branch" == feature/* ]]; then
+            echo "No other feature branches were found to merge \`$source_branch\` into." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "*(The source branch was excluded from the target list to avoid self-merge)*" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No feature branches were found to merge \`$source_branch\` into." >> $GITHUB_STEP_SUMMARY
+          fi
