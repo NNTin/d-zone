@@ -47,8 +47,10 @@ jobs:
             count=0
           else
             echo "Found feature branches: $branches"
-            json=$(echo "$branches" | jq -R -s -c 'split("\n")[:-1]')
+            # Convert each line to a JSON array element
+            json=$(echo "$branches" | jq -R -s -c 'split("\n") | map(select(length > 0))')
             count=$(echo "$json" | jq 'length')
+            echo "Generated JSON: $json"
           fi
 
           echo "Found $count feature branches"
