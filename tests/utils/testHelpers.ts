@@ -5,6 +5,58 @@
 import { expect } from '@playwright/test';
 
 /**
+ * Mock localStorage implementation for unit tests
+ * Provides a complete localStorage-compatible interface for testing
+ * without relying on browser APIs.
+ */
+export class MockLocalStorage implements Storage {
+  private storage: Record<string, string> = {};
+
+  /**
+   * Get an item from storage
+   */
+  getItem(key: string): string | null {
+    return this.storage[key] || null;
+  }
+
+  /**
+   * Set an item in storage
+   */
+  setItem(key: string, value: string): void {
+    this.storage[key] = value;
+  }
+
+  /**
+   * Remove an item from storage
+   */
+  removeItem(key: string): void {
+    delete this.storage[key];
+  }
+
+  /**
+   * Clear all items from storage
+   */
+  clear(): void {
+    this.storage = {};
+  }
+
+  /**
+   * Get the number of items in storage
+   */
+  get length(): number {
+    return Object.keys(this.storage).length;
+  }
+
+  /**
+   * Get the key at the specified index
+   */
+  key(index: number): string | null {
+    const keys = Object.keys(this.storage);
+    return keys[index] || null;
+  }
+}
+
+/**
  * Custom test assertions for game-specific testing
  */
 export class GameTestAssertions {

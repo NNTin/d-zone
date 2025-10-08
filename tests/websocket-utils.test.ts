@@ -5,14 +5,10 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createJoinServerMessage, getStartupServer, util, type DiscordAuth, type GameState } from '../src/websocket-utils';
+import { MockLocalStorage } from './utils/testHelpers';
 
-// Mock localStorage
-const mockLocalStorage = {
-  storage: {} as Record<string, string>,
-  getItem(key: string) { return this.storage[key] || null; },
-  setItem(key: string, value: string) { this.storage[key] = value; },
-  clear() { this.storage = {}; }
-};
+// Create instance of mock localStorage
+const mockLocalStorage = new MockLocalStorage();
 
 describe('WebSocket logic @normal @active', () => {
   beforeEach(() => {
