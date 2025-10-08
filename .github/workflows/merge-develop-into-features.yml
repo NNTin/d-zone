@@ -19,16 +19,37 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for all branches
 
       - name: List feature branches
         id: list
         run: |
+          # First, let's debug what we can see
+          echo "=== Debugging remote branches ==="
+          echo "All remote branches:"
+          git branch -r
+          echo ""
+          echo "Remote feature branches with ls-remote:"
+          git ls-remote --heads origin
+          echo ""
+          echo "Filtering for feature branches:"
+          git ls-remote --heads origin | grep "refs/heads/feature/"
+          echo "=== End debug ==="
+          
           # Get remote branches starting with 'feature/'
-          branches=$(git ls-remote --heads origin "feature/*" | awk '{print $2}' | sed 's#refs/heads/##')
+          branches=$(git ls-remote --heads origin | grep "refs/heads/feature/" | awk '{print $2}' | sed 's#refs/heads/##')
 
-          # Convert to JSON array
-          json=$(echo "$branches" | jq -R -s -c 'split("\n")[:-1]')
-          count=$(echo "$json" | jq 'length')
+          # Convert to JSON array, ensuring we always have a valid array
+          if [ -z "$branches" ]; then
+            echo "No feature branches found"
+            json='["dummy-branch-that-does-not-exist"]'
+            count=0
+          else
+            echo "Found feature branches: $branches"
+            json=$(echo "$branches" | jq -R -s -c 'split("\n")[:-1]')
+            count=$(echo "$json" | jq 'length')
+          fi
 
           echo "Found $count feature branches"
           echo "matrix=$json" >> $GITHUB_OUTPUT
@@ -52,21 +73,32 @@ jobs:
     outputs:
       result: ${{ steps.merge.outputs.message }}
     steps:
+      - name: Skip dummy branch
+        if: matrix.branch == 'dummy-branch-that-does-not-exist'
+        run: |
+          echo "Skipping dummy branch"
+          echo "message=Skipped dummy branch" >> $GITHUB_OUTPUT
+          exit 0
+
       - name: Checkout feature branch
+        if: matrix.branch != 'dummy-branch-that-does-not-exist'
         uses: actions/checkout@v4
         with:
           ref: ${{ matrix.branch }}
           fetch-depth: 0
 
       - name: Set up Git config
+        if: matrix.branch != 'dummy-branch-that-does-not-exist'
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
 
       - name: Fetch develop branch
+        if: matrix.branch != 'dummy-branch-that-does-not-exist'
         run: git fetch origin develop
 
       - name: Attempt to merge develop into ${{ matrix.branch }}
+        if: matrix.branch != 'dummy-branch-that-does-not-exist'
         id: merge
         run: |
           git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
@@ -90,12 +122,13 @@ jobs:
           fi
 
       - name: Commit and push the merge
-        if: steps.merge.outputs.merge_needed == 'true'
+        if: matrix.branch != 'dummy-branch-that-does-not-exist' && steps.merge.outputs.merge_needed == 'true'
         run: |
           git commit -m "Merge branch 'develop' into ${{ matrix.branch }} [auto-merge]"
           git push origin HEAD:${{ matrix.branch }}
 
       - name: Show result
+        if: matrix.branch != 'dummy-branch-that-does-not-exist'
         run: echo "${{ steps.merge.outputs.message }}"
 
   summarize:
