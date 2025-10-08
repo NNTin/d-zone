@@ -498,8 +498,6 @@ export function initWebsocket(): void {
                         data.data.request, requestServer, window.location.pathname + params
                     );
                 }
-                //return;
-                //console.log('Initializing actors',data.data);
                 const userCount = Object.keys(userList).length;
                 game.setMaxListeners(userCount + 100);
                 users.setMaxListeners(userCount + 50);
@@ -575,7 +573,6 @@ export function initWebsocket(): void {
                     }
                 }
             } else {
-                //console.log('Websocket data:',data);
             }
         });
         
@@ -631,22 +628,23 @@ export function joinServer(server: { id: string }): void {
         }
     }
     
-    console.log('Server lookup result:', {
+    gameLogger.debug('Server lookup for connection', {
         requestedServerId: server.id,
-        foundServerData: serverData,
-        allServers: game.servers
+        foundServerData: serverData ? { id: serverData.id, passworded: serverData.passworded } : null,
+        serverCount: game.servers ? Object.keys(game.servers).length : 0
     });
     
     // Only send Discord OAuth token for passworded servers
     if (serverData && serverData.passworded && discordAuth && discordAuth.isLoggedIn()) {
         connectionMessage.data.discordToken = discordAuth.accessToken;
         connectionMessage.data.discordUser = discordAuth.getUser();
-        console.log('Sending Discord OAuth data:', {
-            token: discordAuth.accessToken ? discordAuth.accessToken.substring(0, 10) + '...' : 'null',
-            user: discordAuth.getUser()
+        gameLogger.info('Sending Discord OAuth data for passworded server', {
+            tokenLength: discordAuth.accessToken ? discordAuth.accessToken.length : 0,
+            hasUser: !!discordAuth.getUser(),
+            serverId: server.id
         });
     } else {
-        console.log('Not sending Discord OAuth data. Conditions:', {
+        gameLogger.debug('Not sending Discord OAuth data', {
             serverFound: !!serverData,
             serverPassworded: serverData ? serverData.passworded : 'unknown',
             discordAuthExists: !!discordAuth,
@@ -654,7 +652,10 @@ export function joinServer(server: { id: string }): void {
         });
     }
     
-    console.log('Requesting to join server', server.id, 'with message:', connectionMessage);
+    gameLogger.info('Requesting to join server', {
+        serverId: server.id,
+        hasDiscordAuth: !!connectionMessage.data.discordToken
+    });
     ws.send(JSON.stringify(connectionMessage));
 }
 
@@ -678,7 +679,7 @@ export { util };
 // Main app initialization function - call this to start the app
 export function startApp(): void {
     // TODO: Loading screen while preloading images, connecting to websocket, and generating world
-    console.log('Loading...');
+    gameLogger.info('Starting D-Zone application', { version: packageInfo.version });
     version = packageInfo.version;
     preloader = new Preloader(initGame);
 }

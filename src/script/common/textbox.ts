@@ -1,9 +1,8 @@
 'use strict';
 
-import { inherits } from 'util';
+import { gameLogger } from '../../gameLogger.js';
 import Entity from '../engine/entity.js';
 import { TextBlotter } from './textblotter.js';
-import { gameLogger } from '../../gameLogger.js';
 
 const TEXTBOX_MAX_WIDTH = 96;
 const TEXTBOX_LINES_PER_PAGE = 4;
@@ -164,7 +163,6 @@ export default class TextBox extends Entity {
             const nextLine = self.textMetrics.lines[lineNumber + nl];
             if(nextLine) lineChars += nextLine.chars.length; else break;
         }
-        //console.log(this.parent.username,'says:',this.text);
         const addLetter = function(): void {
             // Check if parent is still valid before continuing animation
             if (!self.parent || !self.parent.preciseScreen) {

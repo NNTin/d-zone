@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events';
-import { Input } from './input.js';
-import util from '../common/util.js';
 import { gameLogger } from '../../gameLogger.js';
+import util from '../common/util.js';
+import { Input } from './input.js';
 
 interface GameOptions {
     step?: number;
@@ -108,7 +108,6 @@ export class Game extends EventEmitter {
             if (self.crashed) return;
             const rightNow = now();
             self.dt += rightNow - self.lastUpdate;
-            // if((self.ticks & 7) == 0) console.log(delta);
             if (self.lastUpdate > 0 && self.dt > 60000) {
                 gameLogger.error('Game engine: Too many updates missed, crashing', {
                     deltaTime: self.dt,

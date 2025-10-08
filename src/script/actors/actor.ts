@@ -424,7 +424,6 @@ export default class Actor extends WorldObject {
                 movementDeltas: { x, y }
             });
         }
-        // not an error: console.error('game world cannot walk at destination', destination);
         return false;
     }
 
@@ -639,7 +638,6 @@ export default class Actor extends WorldObject {
     }
 
     onMessage(message: any): void {
-        // console.log(`Actor.onMessage: ${this.username} received message in channel ${message.channel} from ${message.user.username}`);
         const lastMessage = this.lastMessage as { channel?: string; time: number } || { time: 0 };
         if (message.channel !== lastMessage.channel) return; // Not my active channel
         if (lastMessage.time < Date.now() - 3 * 60 * 1000) return; // Haven't spoken in 3 minutes
