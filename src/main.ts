@@ -1,5 +1,6 @@
 'use strict';
 
+import { gameLogger } from './gameLogger.js';
 import Users from './script/actors/users.js';
 import DiscordOAuth from './script/auth/discord-oauth.js';
 import { util } from './script/common/util.js';
@@ -28,7 +29,7 @@ export { discordAuth, game, ws };
 function initGame(images: Record<string, HTMLCanvasElement>): void {
     // Use direct imports since these modules will be available  
     // We'll fix these imports after converting the JS files to TS
-    console.log('Initializing game with images:', Object.keys(images));
+    gameLogger.info('Initializing game with images', { imageCount: Object.keys(images).length, imageNames: Object.keys(images) });
     
     game = new Game({ step: 1000 / 60 });
     game.renderer = new Renderer({ game: game, images: images });
@@ -56,10 +57,17 @@ function initGame(images: Record<string, HTMLCanvasElement>): void {
     (window as any).pause = function() { game.paused = true; };
     (window as any).unpause = function() { game.paused = false; };
     (window as any).game = game;
+    
+    // Log game initialization complete
+    gameLogger.gameInitialized({ 
+        width: canvas.width, 
+        height: canvas.height, 
+        version: packageInfo.version 
+    });
 }
 
 function reinitializeDiscordAuth(newClientId: string): void {
-    console.log('Reinitializing Discord OAuth with new client ID:', newClientId);
+    gameLogger.info('Reinitializing Discord OAuth with new client ID', { newClientId });
     
     // Store the current state
     const wasLoggedIn = discordAuth && discordAuth.isLoggedIn();
@@ -80,12 +88,14 @@ function reinitializeDiscordAuth(newClientId: string): void {
     // If user was logged in before, they might need to re-authenticate
     // since the client ID changed, but we'll preserve the current state for now
     if (wasLoggedIn && currentUser) {
-        console.log('Discord OAuth client ID updated. User may need to re-authenticate if they encounter issues.');
+        gameLogger.warn('Discord OAuth client ID updated - user may need to re-authenticate', { 
+            currentUser: currentUser?.username 
+        });
         // The stored access token may not work with the new client ID
         // but we'll let the user discover this naturally rather than forcing re-auth
     }
     
-    console.log('Discord OAuth reinitialized successfully');
+    gameLogger.info('Discord OAuth reinitialized successfully');
 }
 
 function setupDiscordAuthEventHandlers(): void {
@@ -93,13 +103,13 @@ function setupDiscordAuthEventHandlers(): void {
     const originalLogin = discordAuth.login;
     discordAuth.login = function() {
         const authUrl = this.getAuthUrl();
-        console.log('Discord OAuth URL:', authUrl);
-        console.log('Opening Discord OAuth popup...');
+        gameLogger.debug('Discord OAuth URL generated', { authUrl });
+        gameLogger.discordLoginAttempt();
         return originalLogin.call(this);
     };
     
     discordAuth.on('login-success', function(user) {
-        console.log('Discord login successful:', user);
+        gameLogger.discordLoginSuccess(user.username);
         // Store user info
         localStorage.setItem('discord_user', JSON.stringify(user));
         
@@ -123,16 +133,16 @@ function setupDiscordAuthEventHandlers(): void {
     });
     
     discordAuth.on('login-error', function(error) {
-        console.error('Discord login error:', error);
+        gameLogger.discordLoginError(error);
         (window as any).alert('Discord login failed: ' + error);
     });
     
     discordAuth.on('login-cancelled', function() {
-        console.log('Discord login cancelled by user');
+        gameLogger.info('Discord login cancelled by user');
     });
     
     discordAuth.on('logout', function() {
-        console.log('Discord logout');
+        gameLogger.discordLogout();
         
         // Update help panel if it's open
         if (game.helpPanel) {
@@ -151,23 +161,28 @@ function setupDiscordAuthEventHandlers(): void {
 function initDiscordAuth(): void {
     // Debug: Log the constructed redirect URI
     const redirectUri = window.location.origin + window.location.pathname.replace('index.html', '') + 'discord-callback.html';
-    console.log('Discord OAuth redirect URI:', redirectUri);
-    console.log('Current location:', window.location.href);
-    console.log('Window origin:', window.location.origin);
-    console.log('Window pathname:', window.location.pathname);
+    gameLogger.debug('Discord OAuth initialization', {
+        redirectUri,
+        currentLocation: window.location.href,
+        origin: window.location.origin,
+        pathname: window.location.pathname
+    });
     
     // Test if callback page is accessible
     fetch(redirectUri)
         .then(function(response) {
-            console.log('Callback page test - Status:', response.status);
+            gameLogger.debug('Discord callback page test', { 
+                status: response.status,
+                accessible: response.ok 
+            });
             if (response.ok) {
-                console.log('✓ Callback page is accessible');
+                gameLogger.debug('✓ Discord callback page is accessible');
             } else {
-                console.error('✗ Callback page not accessible - Status:', response.status);
+                gameLogger.error('✗ Discord callback page not accessible', { status: response.status });
             }
         })
         .catch(function(error) {
-            console.error('✗ Callback page test failed:', error);
+            gameLogger.error('✗ Discord callback page test failed', { error: error.message });
         });
     
     // Initialize with a placeholder - the real client ID will be set by the server
@@ -335,12 +350,20 @@ export function initWebsocket(): void {
 
     function tryNextWebsocketConnection(): void {
         if (currentStrategyIndex >= fallbackStrategies.length) {
-            console.error('All websocket connection strategies failed');
+            gameLogger.error('All websocket connection strategies failed', {
+                totalStrategies: fallbackStrategies.length,
+                attemptedStrategies: fallbackStrategies.map(s => s.description)
+            });
             return;
         }
 
         const strategy = fallbackStrategies[currentStrategyIndex];
-        console.log('Attempting websocket connection strategy ' + (currentStrategyIndex + 1) + '/' + fallbackStrategies.length + ': ' + strategy.description + ' (' + strategy.url + ')');
+        gameLogger.info('Attempting websocket connection', { 
+            strategyIndex: currentStrategyIndex + 1,
+            totalStrategies: fallbackStrategies.length,
+            description: strategy.description,
+            url: strategy.url
+        });
 
         // Swap the comments on the next 3 lines to switch between your websocket server and a virtual one
         ws = new WebSocket(strategy.url);
@@ -349,11 +372,16 @@ export function initWebsocket(): void {
         
         ws.addEventListener('message', function(event) {
             const data = JSON.parse(event.data);
+            gameLogger.websocketMessageReceived(data);
+            
             if (decorator) decorator.beacon.ping();
             
             if (data.type === 'server-list') {
                 game.servers = data.data;
-                console.log('Got server list:', game.servers);
+                gameLogger.info('Received server list', { 
+                    serverCount: game.servers ? Object.keys(game.servers).length : 0,
+                    servers: game.servers 
+                });
                 
                 // Server button
                 game.ui.addButton({ 
@@ -442,9 +470,11 @@ export function initWebsocket(): void {
                 const requestServer = data.data.request.server;
                 localStorage.setItem('dzone-default-server', JSON.stringify({ id: requestServer }));
                 
+                gameLogger.serverJoined(requestServer, data.data.serverName);
+                
                 // Update Discord OAuth client ID if provided
                 if (data.data.clientId && discordAuth) {
-                    console.log('Setting Discord OAuth client ID from server-join:', data.data.clientId);
+                    gameLogger.info('Setting Discord OAuth client ID from server-join', { clientId: data.data.clientId });
                     reinitializeDiscordAuth(data.data.clientId);
                 }
                 
@@ -485,17 +515,29 @@ export function initWebsocket(): void {
                     if (users) users.addActor(userList[uid]); // Fire and forget async call
                     //break;
                 }
-                console.log((users ? Object.keys(users.actors).length : 0).toString()+' actors created');
+                const actorCount = users ? Object.keys(users.actors).length : 0;
+                gameLogger.info('Actors initialized', { 
+                    totalUsers: userCount, 
+                    createdActors: actorCount,
+                    skippedUsers: userCount - actorCount
+                });
                 game.renderer.canvases[0].onResize();
             } else if (data.type === 'presence') { // User status update
+                gameLogger.debug('Actor presence update', { uid: data.data.uid, presence: data.data.presence });
                 if (users) users.updateActor(data.data); // Fire and forget async call
             } else if (data.type === 'message') { // Chatter
+                gameLogger.debug('Message received', { 
+                    channel: data.data.channel, 
+                    user: data.data.user?.username,
+                    messageLength: data.data.content?.length 
+                });
                 users.queueMessage(data.data);
             } else if (data.type === 'error') {
+                gameLogger.error('Server error received', { message: data.data.message });
                 (window as any).alert(data.data.message);
                 if (!game.world) joinServer({id: 'default'});
             } else if (data.type === 'update-clientid') { // Client ID update
-                console.log('Received client ID update:', data.data.clientId);
+                gameLogger.info('Received client ID update', { clientId: data.data.clientId });
                 if (data.data.clientId && discordAuth) {
                     reinitializeDiscordAuth(data.data.clientId);
                     // Show a notification to the user that the OAuth configuration has been updated
@@ -538,11 +580,11 @@ export function initWebsocket(): void {
         });
         
         ws.addEventListener('open', function() { 
-            console.log('✓ Websocket connected successfully using strategy: ' + strategy.description + ' (' + strategy.url + ')'); 
+            gameLogger.websocketConnected(strategy.url);
         });
         
         ws.addEventListener('close', function() {
-            console.log('Websocket disconnected from: ' + strategy.description);
+            gameLogger.websocketDisconnected(`Strategy: ${strategy.description}`);
             cleanupEventListeners();
             // Only try next strategy if we haven't already moved to the next one due to an error
             if (currentStrategyIndex === fallbackStrategies.indexOf(strategy)) {
@@ -552,7 +594,12 @@ export function initWebsocket(): void {
         });
         
         ws.addEventListener('error', function(err) {
-            console.log('Websocket error with strategy ' + (currentStrategyIndex + 1) + '/' + fallbackStrategies.length + ' (' + strategy.description + '):', err);
+            gameLogger.warn('Websocket connection error', { 
+                strategy: strategy.description,
+                strategyIndex: currentStrategyIndex + 1,
+                totalStrategies: fallbackStrategies.length,
+                error: err 
+            });
             // Only increment if we haven't already incremented due to close event
             if (currentStrategyIndex === fallbackStrategies.indexOf(strategy)) {
                 currentStrategyIndex++;

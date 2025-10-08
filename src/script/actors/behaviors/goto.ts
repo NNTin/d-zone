@@ -1,5 +1,6 @@
 'use strict';
 
+import { gameLogger } from '../../../gameLogger.js';
 import { geometry } from '../../common/geometry.js';
 import { util } from '../../common/util.js';
 import Pathfinder from '../pathfinder.js';
@@ -124,7 +125,11 @@ export default class GoTo {
             } else { // If no path, try next closest tile
                 this.attempt++;
                 if (this.attempt > 8) { // Prevent infinite recursion
-                    console.log(`GoTo: ${this.actor.username} giving up after 8 attempts`);
+                    gameLogger.info('GoTo behavior giving up after maximum attempts', {
+                        actor: this.actor.username,
+                        attempts: this.attempt,
+                        target: this.target
+                    });
                     this.actor.stopGoTo(this);
                     return;
                 }

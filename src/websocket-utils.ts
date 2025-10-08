@@ -1,4 +1,5 @@
 // Websocket utility functions for testing
+import { gameLogger } from './gameLogger.js';
 import { util } from './script/common/util.js';
 
 export { util };
@@ -39,7 +40,7 @@ export function createJoinServerMessage(
         }
     }
     
-    console.log('Server lookup result:', {
+    gameLogger.debug('Server lookup for join message', {
         requestedServerId: server.id,
         foundServerData: serverData,
         allServers: gameState.servers
@@ -49,12 +50,12 @@ export function createJoinServerMessage(
     if (serverData && serverData.passworded && discordAuth && discordAuth.isLoggedIn()) {
         connectionMessage.data.discordToken = discordAuth.accessToken;
         connectionMessage.data.discordUser = discordAuth.getUser();
-        console.log('Sending Discord OAuth data:', {
-            token: discordAuth.accessToken ? discordAuth.accessToken.substring(0, 10) + '...' : 'null',
-            user: discordAuth.getUser()
+        gameLogger.debug('Including Discord OAuth data in join message', {
+            tokenLength: discordAuth.accessToken ? discordAuth.accessToken.length : 0,
+            username: discordAuth.getUser()?.username
         });
     } else {
-        console.log('Not sending Discord OAuth data. Conditions:', {
+        gameLogger.debug('Not including Discord OAuth data in join message', {
             serverFound: !!serverData,
             serverPassworded: serverData ? serverData.passworded : 'unknown',
             discordAuthExists: !!discordAuth,

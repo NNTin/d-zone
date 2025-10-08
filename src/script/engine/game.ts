@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import { Input } from './input.js';
 import util from '../common/util.js';
+import { gameLogger } from '../../gameLogger.js';
 
 interface GameOptions {
     step?: number;
@@ -109,7 +110,11 @@ export class Game extends EventEmitter {
             self.dt += rightNow - self.lastUpdate;
             // if((self.ticks & 7) == 0) console.log(delta);
             if (self.lastUpdate > 0 && self.dt > 60000) {
-                console.log('too many updates missed! game crash...');
+                gameLogger.error('Game engine: Too many updates missed, crashing', {
+                    deltaTime: self.dt,
+                    lastUpdate: self.lastUpdate,
+                    currentTime: rightNow
+                });
                 self.crashed = true; 
                 self.paused = true;
             }
@@ -144,7 +149,7 @@ export class Game extends EventEmitter {
                     
                     // Additional safety check
                     if (!isFinite(percent)) {
-                        console.error('Game.update: Invalid progress calculation', {
+                        gameLogger.error('Game update: Invalid progress calculation', {
                             ticks,
                             taskCount: task.count,
                             taskStart: task.start,
@@ -212,7 +217,10 @@ export class Game extends EventEmitter {
 
     mousedown(mouseEvent: MouseEvent): void {
         if (this.mouseOver) {
-            console.log(this.mouseOver);
+            gameLogger.debug('Game mousedown: Target selected', {
+                target: this.mouseOver.constructor?.name || 'unknown',
+                position: this.mouseOver.position || null
+            });
             (window as any).actor = this.mouseOver;
         }
         this.mouseButtons.push(mouseEvent.button);
@@ -244,7 +252,10 @@ export class Game extends EventEmitter {
 
     touchstart(mouseEvent: MouseEvent): void {
         if (this.mouseOver) {
-            console.log(this.mouseOver);
+            gameLogger.debug('Game touchstart: Target selected', {
+                target: this.mouseOver.constructor?.name || 'unknown',
+                position: this.mouseOver.position || null
+            });
             (window as any).actor = this.mouseOver;
         }
         this.mouseButtons.push(mouseEvent.button);

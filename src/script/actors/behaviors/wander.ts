@@ -1,5 +1,6 @@
 'use strict';
 
+import { gameLogger } from '../../../gameLogger.js';
 import { geometry } from '../../common/geometry.js';
 import { util } from '../../common/util.js';
 
@@ -34,7 +35,7 @@ export default class Wander {
             if (canMove) {
                 // Validate destination coordinates
                 if (isNaN(canMove.x) || isNaN(canMove.y) || isNaN(canMove.z)) {
-                    console.error('Wander: tryMove returned NaN destination', {
+                    gameLogger.error('Wander behavior: tryMove returned NaN destination', {
                         actor: this.actor.username,
                         canMove: canMove,
                         direction: direction,

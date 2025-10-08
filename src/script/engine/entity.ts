@@ -2,6 +2,7 @@
 
 import { EventEmitter } from 'events';
 import { util } from '../common/util.js';
+import { gameLogger } from '../../gameLogger.js';
 
 interface EntitySprite {
     [key: string]: any;
@@ -77,7 +78,7 @@ export default class Entity extends EventEmitter {
         
         // Validate ticks parameter to prevent NaN in progress.percent calculation
         if (!isFinite(ticks) || ticks <= 0) {
-            console.error('Entity.tickRepeat: Invalid ticks parameter', {
+            gameLogger.error('Entity tickRepeat: Invalid ticks parameter', {
                 ticks,
                 entity: this.constructor.name,
                 isFinite: isFinite(ticks),

@@ -1,13 +1,14 @@
 'use strict';
 
+import { gameLogger } from '../../gameLogger.js';
 import { geometry } from '../common/geometry.js';
+import TextBox from '../common/textbox.js';
 import { util } from '../common/util.js';
 import WorldObject from '../engine/worldobject.js';
-import Sheet from './sheet.js';
-import Placeholder from './placeholder.js';
-import Wander from './behaviors/wander.js';
 import GoTo from './behaviors/goto.js';
-import TextBox from '../common/textbox.js';
+import Wander from './behaviors/wander.js';
+import Placeholder from './placeholder.js';
+import Sheet from './sheet.js';
 
 interface ActorOptions {
     x: number;
@@ -53,7 +54,7 @@ export default class Actor extends WorldObject {
     constructor(options: ActorOptions) {
         // Validate input coordinates
         if (isNaN(options.x) || isNaN(options.y) || isNaN(options.z)) {
-            console.error('Actor constructor: Invalid coordinates provided', {
+            gameLogger.error('Actor constructor: Invalid coordinates provided', {
                 username: options.username,
                 uid: options.uid,
                 coordinates: { x: options.x, y: options.y, z: options.z }
@@ -171,7 +172,10 @@ export default class Actor extends WorldObject {
             if (this.destination) {
                 // Only cancel movement if no movement is in progress
                 if (this.moveTick) {
-                    console.log(`Actor.updatePresence: ${this.username} cancelling movement due to presence change to ${presence}`);
+                    gameLogger.info('Actor cancelling movement due to presence change', {
+                        username: this.username,
+                        newPresence: presence
+                    });
                     this.removeFromSchedule(this.moveTick);
                     delete this.moveTick;
                     // Clean up movement state
@@ -203,10 +207,10 @@ export default class Actor extends WorldObject {
     toScreenPrecise(): any {
         // Validate position coordinates before calculation
         if (isNaN(this.position.x) || isNaN(this.position.y) || isNaN(this.position.z)) {
-            console.error('Actor.toScreenPrecise: Position coordinates contain NaN', {
+            gameLogger.error('Actor toScreenPrecise: Position coordinates contain NaN', {
                 actor: this.username,
                 position: this.position,
-                caller: new Error().stack
+                uid: this.uid
             });
             // Return fallback coordinates to prevent further NaN propagation
             return { x: 0, y: 0 };
@@ -244,14 +248,11 @@ export default class Actor extends WorldObject {
         
         // Validate calculated screen coordinates
         if (isNaN(screen.x) || isNaN(screen.y)) {
-            console.error('Actor.toScreenPrecise: Calculated screen coordinates are NaN', {
+            gameLogger.error('Actor toScreenPrecise: Calculated screen coordinates are NaN', {
                 actor: this.username,
                 position: this.position,
                 screen: screen,
-                calculation: {
-                    screenX: `(${this.position.x} - ${this.position.y}) * 16 - 8 = ${(this.position.x - this.position.y) * 16 - 8}`,
-                    screenY: `(${this.position.x} + ${this.position.y}) * 8 - (${this.position.z}) * 16 - 8 = ${(this.position.x + this.position.y) * 8 - (this.position.z) * 16 - 8}`
-                }
+                uid: this.uid
             });
             // Return fallback coordinates
             return { x: 0, y: 0 };
@@ -291,11 +292,13 @@ export default class Actor extends WorldObject {
             }
             
             if (!this.sheet.map[state] || !this.sheet.map[state][facing]) {
-                console.error('Actor: No sprite found for state:', state, 'facing:', facing);
-                console.error('Actor: Available states:', Object.keys(this.sheet.map));
-                if (this.sheet.map[state]) {
-                    console.error('Actor: Available facings for', state, ':', Object.keys(this.sheet.map[state]));
-                }
+                gameLogger.error('Actor sprite not found', {
+                    actor: this.username,
+                    state: state,
+                    facing: facing,
+                    availableStates: Object.keys(this.sheet.map),
+                    availableFacingsForState: this.sheet.map[state] ? Object.keys(this.sheet.map[state]) : null
+                });
                 return;
             }
         }
@@ -369,14 +372,14 @@ export default class Actor extends WorldObject {
         if (!game.world || !game.world.canWalk) return false;
         
         if (this.underneath()) {
-            console.log('actor: object on top');
+            gameLogger.debug('Actor movement blocked: object on top', { actor: this.username });
             this.emit('getoffme');
             return false; // Can't move with object on top
         }
         
         // Validate movement deltas
         if (isNaN(x) || isNaN(y)) {
-            console.error('Actor.tryMove: Movement deltas contain NaN', {
+            gameLogger.error('Actor tryMove: Movement deltas contain NaN', {
                 actor: this.username,
                 deltaX: x,
                 deltaY: y,
@@ -387,7 +390,7 @@ export default class Actor extends WorldObject {
         
         // Validate current position before calculating destination
         if (isNaN(this.position.x) || isNaN(this.position.y)) {
-            console.error('Actor.tryMove: Current position contains NaN', {
+            gameLogger.error('Actor tryMove: Current position contains NaN', {
                 actor: this.username,
                 position: this.position,
                 movementDeltas: { x, y }
@@ -399,7 +402,7 @@ export default class Actor extends WorldObject {
         
         // Validate calculated destination
         if (isNaN(destination.x) || isNaN(destination.y)) {
-            console.error('Actor.tryMove: Calculated destination contains NaN', {
+            gameLogger.error('Actor tryMove: Calculated destination contains NaN', {
                 actor: this.username,
                 destination,
                 currentPosition: this.position,
@@ -413,7 +416,7 @@ export default class Actor extends WorldObject {
             if (walkable >= 0 && Math.abs(this.position.z - walkable) <= 0.5) {
                 return { x: destination.x, y: destination.y, z: walkable };
             }
-            console.error('Actor.tryMove: Destination not walkable or invalid height', {
+            gameLogger.error('Actor tryMove: Destination not walkable or invalid height', {
                 actor: this.username,
                 destination,
                 walkable,
@@ -430,7 +433,7 @@ export default class Actor extends WorldObject {
         
         // Prevent starting a new move if one is already in progress
         if (this.moveTick) {
-            console.warn('Actor.startMove: Movement already in progress, ignoring new startMove call', {
+            gameLogger.warn('Actor startMove: Movement already in progress', {
                 actor: this.username,
                 currentDestination: this.destination,
                 frame: this.frame,
@@ -441,7 +444,9 @@ export default class Actor extends WorldObject {
         
         const game = this.game as any;
         if (!game || !game.world) {
-            console.error('Actor.startMove: Game or world not available');
+            gameLogger.error('Actor startMove: Game or world not available', {
+                actor: this.username
+            });
             return;
         }
         
@@ -489,7 +494,8 @@ export default class Actor extends WorldObject {
         
         // Validate that movement is cardinal (not diagonal)
         if (this.destDelta.x !== 0 && this.destDelta.y !== 0) {
-            console.warn(`Actor.startMove: ${this.username} diagonal movement detected! This should not happen.`, {
+            gameLogger.warn('Actor diagonal movement detected', {
+                actor: this.username,
                 destDelta: this.destDelta,
                 destination: this.destination,
                 position: this.position
@@ -564,7 +570,7 @@ export default class Actor extends WorldObject {
     move(x: number, y: number, z?: number, absolute?: boolean): void {
         // Validate input parameters
         if (isNaN(x) || isNaN(y) || (typeof z !== 'undefined' && isNaN(z))) {
-            console.error('Actor.move: Invalid coordinates provided', {
+            gameLogger.error('Actor move: Invalid coordinates provided', {
                 actor: this.username,
                 parameters: { x, y, z, absolute },
                 currentPosition: this.position
@@ -595,7 +601,7 @@ export default class Actor extends WorldObject {
         
         // Validate final position
         if (isNaN(this.position.x) || isNaN(this.position.y) || isNaN(this.position.z)) {
-            console.error('Actor.move: Final position contains NaN after movement', {
+            gameLogger.error('Actor move: Final position contains NaN after movement', {
                 actor: this.username,
                 finalPosition: this.position,
                 movement: { x, y, z, absolute }
@@ -659,7 +665,11 @@ export default class Actor extends WorldObject {
     }
 
     goto(x: number, y: number): void {
-        console.log(`Actor.goto: ${this.username} going to (${x}, ${y})`);
+        gameLogger.debug('Actor goto command', {
+            actor: this.username,
+            targetX: x,
+            targetY: y
+        });
         const target = { position: { x: x, y: y, z: (this.game as any).world.getHeight(x, y) } };
         
         // Remove existing GoTo behaviors
@@ -703,7 +713,10 @@ export default class Actor extends WorldObject {
             try {
                 this.movePlaceholder.remove();
             } catch (error) {
-                console.error('Actor.remove: Error removing movePlaceholder:', error);
+                gameLogger.error('Actor remove: Error removing movePlaceholder', {
+                    actor: this.username,
+                    error: error instanceof Error ? error.message : String(error)
+                });
             }
             delete this.movePlaceholder;
         }
@@ -714,7 +727,10 @@ export default class Actor extends WorldObject {
                 // Cancel any ongoing message animations before removal
                 this.messageBox.remove();
             } catch (error) {
-                console.error('Actor.remove: Error removing messageBox:', error);
+                gameLogger.error('Actor remove: Error removing messageBox', {
+                    actor: this.username,
+                    error: error instanceof Error ? error.message : String(error)
+                });
             }
             delete this.messageBox;
         }
@@ -724,7 +740,10 @@ export default class Actor extends WorldObject {
             try {
                 this.talkBox.remove();
             } catch (error) {
-                console.error('Actor.remove: Error removing talkBox:', error);
+                gameLogger.error('Actor remove: Error removing talkBox', {
+                    actor: this.username,
+                    error: error instanceof Error ? error.message : String(error)
+                });
             }
             delete this.talkBox;
         }
@@ -734,7 +753,10 @@ export default class Actor extends WorldObject {
             try {
                 this.nametag.remove();
             } catch (error) {
-                console.error('Actor.remove: Error removing nametag:', error);
+                gameLogger.error('Actor remove: Error removing nametag', {
+                    actor: this.username,
+                    error: error instanceof Error ? error.message : String(error)
+                });
             }
             delete this.nametag;
         }
@@ -744,7 +766,10 @@ export default class Actor extends WorldObject {
             try {
                 this.placeholder.remove();
             } catch (error) {
-                console.error('Actor.remove: Error removing placeholder:', error);
+                gameLogger.error('Actor remove: Error removing placeholder', {
+                    actor: this.username,
+                    error: error instanceof Error ? error.message : String(error)
+                });
             }
             delete this.placeholder;
         }

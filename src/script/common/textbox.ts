@@ -3,6 +3,7 @@
 import { inherits } from 'util';
 import Entity from '../engine/entity.js';
 import { TextBlotter } from './textblotter.js';
+import { gameLogger } from '../../gameLogger.js';
 
 const TEXTBOX_MAX_WIDTH = 96;
 const TEXTBOX_LINES_PER_PAGE = 4;
@@ -78,11 +79,10 @@ export default class TextBox extends Entity {
         
         // Check if parent still exists and has valid preciseScreen
         if (!this.parent || !this.parent.preciseScreen) {
-            console.warn('TextBox.updateScreen: Parent or parent.preciseScreen is missing', {
+            gameLogger.warn('TextBox updateScreen: Parent or preciseScreen missing', {
                 hasParent: !!this.parent,
                 hasPreciseScreen: this.parent && !!this.parent.preciseScreen,
-                textboxText: this.text,
-                stackTrace: new Error().stack
+                textboxText: this.text
             });
             // Use fallback coordinates and mark for removal
             this.screen.x = 0;
@@ -101,7 +101,7 @@ export default class TextBox extends Entity {
         const parentY = isFinite(this.parent.preciseScreen.y) ? this.parent.preciseScreen.y : 0;
         
         if (parentX !== this.parent.preciseScreen.x || parentY !== this.parent.preciseScreen.y) {
-            console.warn('TextBox.updateScreen: NaN detected in parent.preciseScreen, using fallback', {
+            gameLogger.warn('TextBox updateScreen: NaN detected in parent preciseScreen', {
                 originalX: this.parent.preciseScreen.x,
                 originalY: this.parent.preciseScreen.y,
                 fallbackX: parentX,
@@ -146,7 +146,7 @@ export default class TextBox extends Entity {
         
         // Validate parent before starting animation
         if (!this.parent || !this.parent.preciseScreen) {
-            console.warn('TextBox.scrollMessage: Parent invalid at start, completing immediately');
+            gameLogger.warn('TextBox scrollMessage: Parent invalid at start');
             complete();
             return;
         }
@@ -168,7 +168,7 @@ export default class TextBox extends Entity {
         const addLetter = function(): void {
             // Check if parent is still valid before continuing animation
             if (!self.parent || !self.parent.preciseScreen) {
-                console.warn('TextBox.scrollMessage: Parent became invalid during animation, stopping');
+                gameLogger.warn('TextBox scrollMessage: Parent became invalid during animation');
                 complete();
                 return;
             }
@@ -185,7 +185,7 @@ export default class TextBox extends Entity {
                         self.tickRepeat(function(progress: any) {
                             // Check if parent is still valid before updating
                             if (!self.parent || !self.parent.preciseScreen) {
-                                console.warn('TextBox.scrollMessage: Parent became invalid during closing animation, stopping');
+                                gameLogger.warn('TextBox scrollMessage: Parent became invalid during closing animation');
                                 complete();
                                 return;
                             }
@@ -214,7 +214,7 @@ export default class TextBox extends Entity {
         this.tickRepeat(function(progress: any) {
             // Check if parent is still valid before updating
             if (!self.parent || !self.parent.preciseScreen) {
-                console.warn('TextBox.scrollMessage: Parent became invalid during opening animation, stopping');
+                gameLogger.warn('TextBox scrollMessage: Parent became invalid during opening animation');
                 complete();
                 return;
             }
