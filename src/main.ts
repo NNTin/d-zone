@@ -58,6 +58,15 @@ function initGame(images: Record<string, HTMLCanvasElement>): void {
     (window as any).unpause = function() { game.paused = false; };
     (window as any).game = game;
     
+    // Set up initial draw logging
+    let initialDrawLogged = false;
+    game.on('render', () => {
+        if (!initialDrawLogged) {
+            initialDrawLogged = true;
+            gameLogger.initialDraw();
+        }
+    });
+    
     // Log game initialization complete
     gameLogger.gameInitialized({ 
         width: canvas.width, 

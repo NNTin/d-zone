@@ -200,6 +200,10 @@ export class Game extends EventEmitter {
         this.viewWidth = resize.width;
         this.viewHeight = resize.height;
         this.input.mouseScale = resize.scale;
+        
+        // Log canvas resize event for E2E testing
+        gameLogger.canvasResize(resize.width, resize.height);
+        
         this.emit('resize', resize);
     }
 
