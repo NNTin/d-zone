@@ -25,37 +25,12 @@ jobs:
 
       - name: Build for production
         run: |
-          VERSION=${{ github.event.inputs.version }}
-          mkdir -p build/$VERSION
-          npm run build:prod
-          cp -r dist/* build/$VERSION
-
-          # Create root index.html that redirects to the current version, preserving socketURL parameter if present
-          cat > build/index.html << EOF
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <script>
-              // Get socketURL parameter if present
-              const urlParams = new URLSearchParams(window.location.search);
-              const socketURL = urlParams.get('socketURL');
-              
-              // Build redirect URL
-              let redirectUrl = '${VERSION}/';
-              if (socketURL) {
-                redirectUrl += '?socketURL=' + encodeURIComponent(socketURL);
-              }
-              
-              // Redirect immediately
-              window.location.href = redirectUrl;
-            </script>
-            <meta http-equiv="refresh" content="0; url=${VERSION}/">
-          </head>
-          <body>
-            Redirecting to latest version...
-          </body>
-          </html>
-          EOF
+          # Install PowerShell on Ubuntu runner
+          sudo apt-get update
+          sudo apt-get install -y powershell
+          
+          # Run the deployment script
+          pwsh .github/scripts/deploy.ps1 -Version "${{ github.event.inputs.version }}"
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4

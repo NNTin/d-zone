@@ -93,3 +93,5 @@ allure-report/
 coverage/
 
 /dist/static/bundle.js.map
+
+/build/
