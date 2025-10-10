@@ -128,6 +128,17 @@ export default class Actor extends WorldObject {
     addToGame(game: any): void {
         super.addToGame(game);
         
+        // Log actor spawning
+        gameLogger.actorSpawned({
+            uid: this.uid,
+            username: this.username,
+            x: this.position.x,
+            y: this.position.y,
+            z: this.position.z,
+            roleColor: this.roleColor,
+            presence: this.presence
+        });
+        
         // Add role color sheet if needed
         if (this.roleColor) {
             game.renderer.addColorSheet({

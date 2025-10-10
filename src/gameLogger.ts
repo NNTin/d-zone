@@ -105,6 +105,51 @@ class GameLogger {
   }
 
   // ===========================================
+  // WORLD GENERATION EVENTS
+  // ===========================================
+
+  /**
+   * World generation completed
+   */
+  worldGenerated(data: {
+    totalTiles: number;
+    spawnablePositions: number;
+    worldSize: number;
+    worldRadius: number;
+    mapBounds: { xl: number; yl: number; xh: number; yh: number };
+    mainIslandSize?: number;
+    totalIslands?: number;
+    spawnPositions?: string[];
+  }): void {
+    if (!this.enabled) return;
+    this.baseLogger.info({
+      category: 'world',
+      event: 'generated',
+      timestamp: Date.now(),
+      ...data
+    }, `World generated: ${data.totalTiles} tiles, ${data.spawnablePositions} spawn positions`);
+  }
+
+  /**
+   * World spawn position analysis completed
+   */
+  worldSpawnAnalysis(data: {
+    totalPositions: number;
+    validSpawnPositions: number;
+    invalidSpawnPositions: number;
+    validPositions: string[];
+    invalidPositions: string[];
+  }): void {
+    if (!this.enabled) return;
+    this.baseLogger.info({
+      category: 'world',
+      event: 'spawn_analysis',
+      timestamp: Date.now(),
+      ...data
+    }, `Spawn analysis: ${data.validSpawnPositions} valid, ${data.invalidSpawnPositions} invalid positions`);
+  }
+
+  // ===========================================
   // ACTOR SYSTEM EVENTS
   // ===========================================
 
@@ -523,5 +568,6 @@ export { logger as baseLogger };
 
 // Export types for TypeScript support
     export type {
-        GameLogger
-    };
+    GameLogger
+  };
+
