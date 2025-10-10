@@ -74,7 +74,8 @@ test.describe('@critical Game Initialization', () => {
     const canvas = page.locator('canvas[id^="main"]').first();
 
     // Check canvas tag and basic properties
-    expect(await canvas.getAttribute('tagName')).toBe('CANVAS');    // Verify canvas has dimensions
+    const tagName = await canvas.evaluate((el: HTMLElement) => el.tagName);
+    expect(tagName).toBe('CANVAS');    // Verify canvas has dimensions
     const box = await canvas.boundingBox();
     expect(box).toBeTruthy();
     expect(box!.width).toBeGreaterThan(0);
@@ -105,13 +106,21 @@ test.describe('@critical Canvas Resize Functionality', () => {
   });
 
   test('@critical should handle viewport resize correctly', async ({ page }) => {
-    // Get initial canvas dimensions
+    // Get initial canvas dimensions from game initialization
     const initialEvent = await gameUtils.waitForGameEvent('game', 'initialized');
     const initialWidth = initialEvent.data.width;
     const initialHeight = initialEvent.data.height;
     
+    // Clear existing logs to focus on resize events
+    gameUtils.clearLogs();
+    
     // Resize viewport to trigger canvas resize
+    // The canvas system calculates new dimensions as: Math.ceil(window.inner* / scale)
+    // With scale=2, a 1200x800 viewport should result in 600x400 canvas dimensions
     await page.setViewportSize({ width: 1200, height: 800 });
+    
+    // Wait a moment for the resize to be processed
+    await page.waitForTimeout(100);
     
     // Wait for canvas resize event
     const resizeEvent = await gameUtils.waitForGameEvent('canvas', 'resize', 10000);
@@ -126,14 +135,19 @@ test.describe('@critical Canvas Resize Functionality', () => {
     expect(resizeEvent.data.height).toBeGreaterThan(0);
     
     // Verify dimensions actually changed
+    // Note: Canvas dimensions are calculated as Math.ceil(viewport / scale)
     expect(resizeEvent.data.width !== initialWidth || resizeEvent.data.height !== initialHeight).toBe(true);
     
-    // Verify canvas element reflects new size
-    const canvas = page.locator('canvas[id^="main"]').first();
-    const newBox = await canvas.boundingBox();
-    expect(newBox).toBeTruthy();
-    expect(newBox!.width).toBeGreaterThan(0);
-    expect(newBox!.height).toBeGreaterThan(0);
+    // Verify the active canvas element reflects new size
+    // The active canvas is the one with z-index: 5 (currently main2 with scale=2)
+    const activeCanvas = page.locator('canvas[style*="z-index: 5"]');
+    await expect(activeCanvas).toBeVisible();
+    
+    // Verify the active canvas has been resized
+    const canvasWidth = await activeCanvas.getAttribute('width');
+    const canvasHeight = await activeCanvas.getAttribute('height');
+    expect(parseInt(canvasWidth!)).toBe(resizeEvent.data.width);
+    expect(parseInt(canvasHeight!)).toBe(resizeEvent.data.height);
     
     // Take debug screenshot after resize
     await gameUtils.takeDebugScreenshot('after-resize');
@@ -146,17 +160,18 @@ test.describe('@critical Canvas Resize Functionality', () => {
     // Clear existing logs to focus on resize events
     gameUtils.clearLogs();
     
-    // Perform multiple rapid resizes
+    // Perform multiple rapid resizes with significantly different viewport sizes
+    // Each should trigger a canvas resize since dimensions = Math.ceil(viewport / scale)
     const resizeSizes = [
-      { width: 800, height: 600 },
-      { width: 1024, height: 768 },
-      { width: 1440, height: 900 }
+      { width: 800, height: 600 },   // Should result in ~400x300 canvas (scale=2)
+      { width: 1440, height: 900 },  // Should result in ~720x450 canvas (scale=2)
+      { width: 1920, height: 1080 }  // Should result in ~960x540 canvas (scale=2)
     ];
     
     for (const size of resizeSizes) {
       await page.setViewportSize(size);
       // Small delay to allow resize processing
-      await page.waitForTimeout(100);
+      await page.waitForTimeout(150);
     }
     
     // Wait for at least one resize event
@@ -173,12 +188,15 @@ test.describe('@critical Canvas Resize Functionality', () => {
     expect(lastResize.data.width).toBeGreaterThan(0);
     expect(lastResize.data.height).toBeGreaterThan(0);
     
-    // Verify canvas is still functional after rapid resizes
-    await GameAssertions.assertCanvasVisible(page);
-    const canvas = page.locator('canvas[id^="main"]').first();
-    const box = await canvas.boundingBox();
-    expect(box?.width).toBeGreaterThan(0);
-    expect(box?.height).toBeGreaterThan(0);
+    // Verify the active canvas (z-index: 5) is still functional after rapid resizes
+    const activeCanvas = page.locator('canvas[style*="z-index: 5"]');
+    await expect(activeCanvas).toBeVisible();
+    
+    // Verify the active canvas has the expected dimensions from the last resize
+    const canvasWidth = await activeCanvas.getAttribute('width');
+    const canvasHeight = await activeCanvas.getAttribute('height');
+    expect(parseInt(canvasWidth!)).toBe(lastResize.data.width);
+    expect(parseInt(canvasHeight!)).toBe(lastResize.data.height);
   });
 
   test('@critical should maintain game state after resize', async ({ page }) => {
@@ -189,8 +207,11 @@ test.describe('@critical Canvas Resize Functionality', () => {
     await page.waitForTimeout(2000);
     const initialActorCount = gameUtils.getGameState().actorCount;
     
-    // Resize viewport
-    await page.setViewportSize({ width: 1000, height: 700 });
+    // Clear logs to focus on resize events
+    gameUtils.clearLogs();
+    
+    // Resize viewport to a significantly different size
+    await page.setViewportSize({ width: 1600, height: 900 });
     
     // Wait for resize event
     await gameUtils.waitForGameEvent('canvas', 'resize', 5000);
@@ -202,14 +223,84 @@ test.describe('@critical Canvas Resize Functionality', () => {
     const finalActorCount = gameUtils.getGameState().actorCount;
     expect(finalActorCount).toBe(initialActorCount);
     
-    // Verify game is still interactive (canvas should still accept events)
-    await GameAssertions.assertCanvasVisible(page);
-    const canvas = page.locator('canvas[id^="main"]').first();
+    // Verify the active canvas is still interactive
+    const activeCanvas = page.locator('canvas[style*="z-index: 5"]');
+    await expect(activeCanvas).toBeVisible();
     
     // Try a canvas interaction to verify it's still working
-    await gameUtils.hoverOnCanvas(100, 100);
+    // Click on the active canvas (which should be scaled appropriately)
+    await activeCanvas.hover();
     
     // Game should still be responsive
     await page.waitForTimeout(500);
+    
+    // Verify all 4 canvases are still present with correct scaling
+    const allCanvases = page.locator('canvas[id^="main"]');
+    const canvasCount = await allCanvases.count();
+    expect(canvasCount).toBe(4);
+    
+    // Verify the active canvas has the correct z-index
+    const activeCanvasZIndex = await activeCanvas.evaluate(
+      (el: HTMLElement) => window.getComputedStyle(el).zIndex
+    );
+    expect(activeCanvasZIndex).toBe('5');
+  });
+
+  test('@critical should handle error cases gracefully', async ({ page }) => {
+    // Wait for initial game load
+    await gameUtils.waitForGameEvent('game', 'initialized');
+    
+    // Test 1: Try to resize to invalid dimensions (too small)
+    gameUtils.clearLogs();
+    await page.setViewportSize({ width: 1, height: 1 });
+    
+    // Game should handle this gracefully - wait for potential resize event
+    await page.waitForTimeout(2000);
+    
+    // Verify canvases still exist and one is active
+    const allCanvases = page.locator('canvas[id^="main"]');
+    const canvasCount = await allCanvases.count();
+    expect(canvasCount).toBe(4);
+    
+    const activeCanvas = page.locator('canvas[style*="z-index: 5"]');
+    await expect(activeCanvas).toBeVisible();
+    
+    // Test 2: Rapid viewport changes
+    gameUtils.clearLogs();
+    for (let i = 0; i < 3; i++) {
+      const width = 800 + i * 200;
+      const height = 600 + i * 150;
+      await page.setViewportSize({ width, height });
+      await page.waitForTimeout(100); // Short delay between changes
+    }
+    
+    // Wait for any pending resize operations to complete
+    await page.waitForTimeout(1000);
+    
+    // Verify game is still in a valid state
+    const finalActiveCanvas = page.locator('canvas[style*="z-index: 5"]');
+    await expect(finalActiveCanvas).toBeVisible();
+    
+    // Verify all 4 canvases are still present
+    const finalCanvasCount = await allCanvases.count();
+    expect(finalCanvasCount).toBe(4);
+    
+    // Test 3: Try to access canvas context after resize stress test
+    const canvasContext = await activeCanvas.evaluate((canvas: HTMLCanvasElement) => {
+      const ctx = canvas.getContext('2d');
+      return ctx !== null;
+    });
+    expect(canvasContext).toBe(true);
+    
+    // Verify the active canvas has proper dimensions
+    const activeCanvasDimensions = await activeCanvas.evaluate((canvas: HTMLCanvasElement) => {
+      return {
+        width: canvas.width,
+        height: canvas.height
+      };
+    });
+    
+    expect(activeCanvasDimensions.width).toBeGreaterThan(0);
+    expect(activeCanvasDimensions.height).toBeGreaterThan(0);
   });
 });

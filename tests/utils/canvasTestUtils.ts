@@ -206,7 +206,9 @@ export class CanvasGameTestUtils {
    * Simulate mouse hover over coordinates
    */
   async hoverOnCanvas(x: number, y: number): Promise<void> {
-    const canvas = this.page.locator('#main');
+    // The game creates multiple canvas elements with IDs like main1, main2, main3, main4
+    // We need to find the one that's currently visible (highest z-index)
+    const canvas = this.page.locator('canvas[id^="main"]').first();
     await canvas.hover({
       position: { x, y }
     });
@@ -216,7 +218,9 @@ export class CanvasGameTestUtils {
    * Simulate click on canvas coordinates
    */
   async clickOnCanvas(x: number, y: number): Promise<void> {
-    const canvas = this.page.locator('#main');
+    // The game creates multiple canvas elements with IDs like main1, main2, main3, main4
+    // We need to find the one that's currently visible (highest z-index)
+    const canvas = this.page.locator('canvas[id^="main"]').first();
     await canvas.click({
       position: { x, y }
     });
