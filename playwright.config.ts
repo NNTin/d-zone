@@ -65,12 +65,13 @@ export default defineConfig({
     },
     
     // CI projects with shard-specific names for better Allure reporting
-    {
+    // Only run this project in CI environment
+    ...(process.env.CI ? [{
       name: process.env.ALLURE_SHARD_ID ? `ci-shard-${process.env.ALLURE_SHARD_ID}` : 'ci',
       use: { ...devices['Desktop Chrome'] },
       grep: /@critical|@normal|@long|@active/,
       grepInvert: /@inactive/,
-    },
+    }] : []),
   ],
 
   /* Run your local dev server before starting the tests */
