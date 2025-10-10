@@ -31,7 +31,7 @@ jobs:
           cp -r dist/* build/$VERSION
 
           # Create root index.html with hash-based routing (no redirects)
-          cat > build/index.html << 'EOF'
+          cat > build/index.html << "EOF"
           <!DOCTYPE html>
           <html lang="en">
           <head>
