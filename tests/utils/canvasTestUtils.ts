@@ -181,6 +181,13 @@ export class CanvasGameTestUtils {
   }
 
   /**
+   * Get all captured logs
+   */
+  getAllLogs(): GameLogEvent[] {
+    return [...this.logs];
+  }
+
+  /**
    * Get recent logs (last N seconds)
    */
   getRecentLogs(seconds: number = 5): GameLogEvent[] {

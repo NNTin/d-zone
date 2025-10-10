@@ -1,10 +1,10 @@
 'use strict';
 
 import { EventEmitter } from 'events';
-import { util } from '../common/util.js';
-import { geometry } from '../common/geometry.js';
-import BetterCanvas from '../common/bettercanvas.js';
 import { gameLogger } from '../../gameLogger.js';
+import BetterCanvas from '../common/bettercanvas.js';
+import { geometry } from '../common/geometry.js';
+import { util } from '../common/util.js';
 
 // We'll need to convert these dependencies or use dynamic imports
 interface Slab {
@@ -161,6 +161,18 @@ export default class World extends EventEmitter {
         if (beaconIndex > -1) {
             unoccupiedGrids.splice(beaconIndex, 1); // 0,0 is taken by beacon
         }
+        
+        // Log world generation completion with spawn positions
+        gameLogger.worldGenerated({ 
+            totalTiles: Object.keys(this.map).length,
+            spawnablePositions: unoccupiedGrids.length,
+            worldSize: this.worldSize,
+            worldRadius: this.worldRadius,
+            mapBounds: this.mapBounds,
+            mainIslandSize: this.islands[this.mainIsland]?.length || 0,
+            totalIslands: this.islands.length,
+            spawnPositions: unoccupiedGrids.slice(0, 10) // Log first 10 spawn positions as sample
+        });
         
         gameLogger.info('World: Created world', { 
             tileCount: Object.keys(this.map).length 
