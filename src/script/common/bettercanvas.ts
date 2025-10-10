@@ -1,5 +1,7 @@
 'use strict';
 
+import { gameLogger } from '../../gameLogger.js';
+
 function isNumeric(n: any): n is number {
     return !isNaN(parseFloat(n)) && isFinite(n);
 }
@@ -10,7 +12,7 @@ export class BetterCanvas {
 
     constructor(width: number, height: number) {
         if (!isNumeric(width) || !isNumeric(height)) {
-            console.error('bad canvas size!', width, height);
+            gameLogger.error('BetterCanvas: Invalid canvas size', { width, height });
         }
         this.canvas = document.createElement('canvas');
         this.canvas.width = width;
@@ -36,7 +38,9 @@ export class BetterCanvas {
     ): void {
         if (!img || !(sx >= 0) || !(sy >= 0) || !(sw >= 0) || !(sh >= 0)
             || !isNumeric(dx) || !isNumeric(dy) || !(dw >= 0) || !(dh >= 0)) {
-            console.error('bad drawImage params!', img, sx, sy, sw, sh, dx, dy, dw, dh);
+            gameLogger.error('BetterCanvas drawImage: Invalid parameters', { 
+                hasImg: !!img, sx, sy, sw, sh, dx, dy, dw, dh 
+            });
             if ((window as any).pause) {
                 (window as any).pause();
             }
@@ -62,7 +66,7 @@ export class BetterCanvas {
 
     fillRect(color: string, x: number, y: number, w: number, h: number): void {
         if (!isNumeric(x) || !isNumeric(y) || !isNumeric(w) || !isNumeric(h)) {
-            console.error('bad fillRect params!', color, x, y, w, h);
+            gameLogger.error('BetterCanvas fillRect: Invalid parameters', { color, x, y, w, h });
             if ((window as any).pause) {
                 (window as any).pause();
             }
@@ -73,7 +77,7 @@ export class BetterCanvas {
 
     clearRect(x: number, y: number, w: number, h: number): void {
         if (!isNumeric(x) || !isNumeric(y) || !isNumeric(w) || !isNumeric(h)) {
-            console.error('bad clearRect params!', x, y, w, h);
+            gameLogger.error('BetterCanvas clearRect: Invalid parameters', { x, y, w, h });
             if ((window as any).pause) {
                 (window as any).pause();
             }

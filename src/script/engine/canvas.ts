@@ -3,6 +3,7 @@
 import util from '../common/util.js';
 import { EventEmitter } from 'events';
 import BetterCanvas from '../common/bettercanvas.js';
+import { gameLogger } from '../../gameLogger.js';
 
 interface CanvasOptions {
     id: string;
@@ -211,7 +212,7 @@ export class Canvas extends EventEmitter {
 
     drawBG(bgCanvas: BGCanvas): void {
         if (!bgCanvas || !bgCanvas.image) {
-            console.error('Canvas: No bgCanvas or bgCanvas.image');
+            gameLogger.error('Canvas drawBG: No bgCanvas or bgCanvas.image');
             return;
         }
         
@@ -275,21 +276,27 @@ export class Canvas extends EventEmitter {
         if (Array.isArray(sprite.image)) {
             const colorCollection = this.images![sprite.image[0]] as Record<string, HTMLCanvasElement>;
             if (!colorCollection) {
-                console.error('Canvas.drawEntity - Color collection not found for:', sprite.image[0]);
-                console.error('Available images:', Object.keys(this.images!));
+                gameLogger.error('Canvas drawEntity: Color collection not found', {
+                    requestedCollection: sprite.image[0],
+                    availableImages: Object.keys(this.images!)
+                });
                 return;
             }
             image = colorCollection[sprite.image[1]];
             if (!image) {
-                console.error('Canvas.drawEntity - Colored sprite not found:', sprite.image);
-                console.error('Available in color collection:', Object.keys(colorCollection));
+                gameLogger.error('Canvas drawEntity: Colored sprite not found', {
+                    requestedSprite: sprite.image,
+                    availableInCollection: Object.keys(colorCollection)
+                });
                 return;
             }
         } else if (typeof sprite.image === 'string') {
             image = this.images![sprite.image] as HTMLCanvasElement;
             if (!image) {
-                console.error('Canvas.drawEntity - Image not found:', sprite.image);
-                console.error('Available images:', Object.keys(this.images!));
+                gameLogger.error('Canvas drawEntity: Image not found', {
+                    requestedImage: sprite.image,
+                    availableImages: Object.keys(this.images!)
+                });
                 return;
             }
         } else {
@@ -311,7 +318,7 @@ export class Canvas extends EventEmitter {
                             !isFinite(sprite.metrics.w) || !isFinite(sprite.metrics.h);
         
         if (hasNaNValues) {
-            console.error('Canvas.drawEntity - NaN detected:', {
+            gameLogger.error('Canvas drawEntity: NaN detected in coordinates', {
                 spriteType: sprite.constructor?.name || 'unknown',
                 spriteParent: sprite.parent?.constructor?.name || 'no parent',
                 spriteParentUsername: sprite.parent?.username || 'no username',

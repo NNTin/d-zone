@@ -4,6 +4,7 @@ import { EventEmitter } from 'events';
 import { util } from '../common/util.js';
 import { geometry } from '../common/geometry.js';
 import BetterCanvas from '../common/bettercanvas.js';
+import { gameLogger } from '../../gameLogger.js';
 
 // We'll need to convert these dependencies or use dynamic imports
 interface Slab {
@@ -99,10 +100,10 @@ export default class World extends EventEmitter {
             PathfinderClass = PathfinderModule.default;
             this.generateWorld();
         } catch (error) {
-            console.error('World: Failed to load world dependencies:', error);
-            if (error instanceof Error) {
-                console.error('World: Error stack:', error.stack);
-            }
+            gameLogger.error('World: Failed to load world dependencies', {
+                error: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined
+            });
             // Fall back to simpler world generation or throw error
             throw error;
         }
@@ -145,7 +146,9 @@ export default class World extends EventEmitter {
             }
         }
         
-        console.log('World: Generated', Object.keys(this.map).length, 'slab tiles');
+        gameLogger.info('World: Generated slab tiles', { 
+            tileCount: Object.keys(this.map).length 
+        });
         this.staticMap = [];
         this.crawlMap(); // Examine map to determine islands, borders, etc
         this.createTiles(); // Create map tiles from grid intersections
@@ -159,11 +162,15 @@ export default class World extends EventEmitter {
             unoccupiedGrids.splice(beaconIndex, 1); // 0,0 is taken by beacon
         }
         
-        console.log('Created world with', Object.keys(this.map).length, 'tiles');
+        gameLogger.info('World: Created world', { 
+            tileCount: Object.keys(this.map).length 
+        });
     }
 
     private createBackground(): void {
-        console.log('World: createBackground - Starting with', this.staticMap.length, 'tiles');
+        gameLogger.debug('World: Creating background', { 
+            staticMapCount: this.staticMap.length 
+        });
         
         let lowestScreenX = 0, lowestScreenY = 0, highestScreenX = 0, highestScreenY = 0;
         
@@ -178,7 +185,7 @@ export default class World extends EventEmitter {
             highestScreenY = highestScreenY > preScreen.y ? highestScreenY : preScreen.y;
         }
         
-        console.log('World: createBackground - Screen bounds:', {
+        gameLogger.debug('World: Calculated screen bounds', {
             lowestScreenX, lowestScreenY, highestScreenX, highestScreenY
         });
         
@@ -197,12 +204,12 @@ export default class World extends EventEmitter {
                           !isFinite(tile.sprite.metrics.ox || 0) || !isFinite(tile.sprite.metrics.oy || 0);
             
             if (j < 3 || hasNaN) {
-                console.log(`World: createBackground - Tile ${j} data:`, {
-                    'tile.screen': tile.screen,
-                    'tile.sprite': tile.sprite,
-                    'tile.sprite.metrics': tile.sprite.metrics,
-                    'screen before offset': { x: screen.x, y: screen.y },
-                    'hasNaN': hasNaN
+                gameLogger.debug('World: Background tile data', {
+                    tileIndex: j,
+                    tileScreen: tile.screen,
+                    spriteMetrics: tile.sprite.metrics,
+                    screenBeforeOffset: { x: screen.x, y: screen.y },
+                    hasNaN: hasNaN
                 });
             }
             
@@ -213,20 +220,24 @@ export default class World extends EventEmitter {
             
             // Check for NaN after calculations
             if (!isFinite(screen.x) || !isFinite(screen.y)) {
-                console.error(`World: createBackground - NaN detected for tile ${j}:`, {
-                    'original tile.screen': { x: tile.screen.x, y: tile.screen.y },
-                    'tile.sprite.metrics.ox': tile.sprite.metrics.ox,
-                    'tile.sprite.metrics.oy': tile.sprite.metrics.oy,
-                    'lowestScreenX': lowestScreenX,
-                    'lowestScreenY': lowestScreenY,
-                    'final screen': screen
+                gameLogger.error('World: NaN detected in background tile', {
+                    tileIndex: j,
+                    originalScreen: { x: tile.screen.x, y: tile.screen.y },
+                    spriteOffsetX: tile.sprite.metrics.ox,
+                    spriteOffsetY: tile.sprite.metrics.oy,
+                    lowestScreenX: lowestScreenX,
+                    lowestScreenY: lowestScreenY,
+                    finalScreen: screen
                 });
                 continue; // Skip this tile
             }
             
             const tileImage = this.game.renderer.images[tile.sprite.image];
             if (!tileImage) {
-                console.error('World: createBackground - Missing image for tile:', tile.sprite.image);
+                gameLogger.error('World: Missing image for background tile', {
+                    tileImage: tile.sprite.image,
+                    tileIndex: j
+                });
                 continue;
             }
             
@@ -240,7 +251,8 @@ export default class World extends EventEmitter {
             tilesDrawn++;
             
             if (j < 5) { // Log first few tiles for debugging
-                console.log('World: createBackground - Drew tile', j, ':', {
+                gameLogger.debug('World: Drew background tile', {
+                    tileIndex: j,
                     image: tile.sprite.image,
                     sourceRect: `${tile.sprite.metrics.x},${tile.sprite.metrics.y} ${tile.sprite.metrics.w}x${tile.sprite.metrics.h}`,
                     destPos: `${Math.round(screen.x)},${Math.round(screen.y)}`
@@ -413,7 +425,13 @@ export default class World extends EventEmitter {
             const tileCode = getTileCode(oGrid, nGrids[0]) + '-' + getTileCode(oGrid, nGrids[1])
                 + '-' + getTileCode(oGrid, nGrids[2]) + '-' + getTileCode(oGrid, nGrids[3]);
             const tileSprite = (new TileSheetClass('tile')).map[tileCode];
-            if(!tileSprite) console.error('unknown tile code', tileCode, nGrids);
+            if(!tileSprite) {
+                gameLogger.error('World: Unknown tile code', {
+                    tileCode: tileCode,
+                    neighborGrids: nGrids,
+                    originalGrid: oGrid
+                });
+            }
             return {
                 tileCode: tileCode, position: tile, grid: grid, game: game
             };
@@ -446,8 +464,11 @@ export default class World extends EventEmitter {
         if(this.objects[obj.position.x]) {
             if(this.objects[obj.position.x][obj.position.y]) {
                 if(this.objects[obj.position.x][obj.position.y][obj.position.z]) {
-                    console.error('occupado!', obj.position.x, obj.position.y, obj.position.z,
-                        obj, this.objects[obj.position.x][obj.position.y][obj.position.z]);
+                    gameLogger.error('World: Position occupied', {
+                        position: obj.position,
+                        newObject: obj.constructor?.name || 'unknown',
+                        existingObject: this.objects[obj.position.x][obj.position.y][obj.position.z].constructor?.name || 'unknown'
+                    });
                     return false;
                 }
             } else {

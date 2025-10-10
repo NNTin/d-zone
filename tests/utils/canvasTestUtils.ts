@@ -56,16 +56,28 @@ export class CanvasGameTestUtils {
         const text = msg.text();
         
         // Look for structured game logs (JSON format)
-        if (text.startsWith('[GAME]')) {
-          const logData = JSON.parse(text.replace('[GAME]', ''));
-          this.logs.push({
-            timestamp: Date.now(),
-            level: msg.type() as any,
-            ...logData
-          });
-          
-          // Update game state based on log events
-          this.updateGameState(logData);
+        if (text.startsWith('[GAME_LOG]')) {
+          const pinoLogData = JSON.parse(text.replace('[GAME_LOG]', '').trim());
+          // Extract the actual log data from pino's structure
+          // pino logs have this structure: { ts, messages: [data, message], bindings, level }
+          const messages = pinoLogData.messages || [];
+          if (messages.length > 0) {
+            const logData = messages[0]; // First message contains the structured data
+            if (logData.category && logData.event) {
+              // Extract category and event, everything else goes in data
+              const { category, event, timestamp, ...data } = logData;
+              this.logs.push({
+                timestamp: Date.now(),
+                level: 'info',
+                category,
+                event,
+                data
+              });
+              
+              // Update game state based on log events
+              this.updateGameState(logData);
+            }
+          }
         }
       } catch (error) {
         // Ignore non-JSON logs
@@ -194,7 +206,9 @@ export class CanvasGameTestUtils {
    * Simulate mouse hover over coordinates
    */
   async hoverOnCanvas(x: number, y: number): Promise<void> {
-    const canvas = this.page.locator('#main');
+    // The game creates multiple canvas elements with IDs like main1, main2, main3, main4
+    // We need to find the one that's currently visible (highest z-index)
+    const canvas = this.page.locator('canvas[id^="main"]').first();
     await canvas.hover({
       position: { x, y }
     });
@@ -204,7 +218,9 @@ export class CanvasGameTestUtils {
    * Simulate click on canvas coordinates
    */
   async clickOnCanvas(x: number, y: number): Promise<void> {
-    const canvas = this.page.locator('#main');
+    // The game creates multiple canvas elements with IDs like main1, main2, main3, main4
+    // We need to find the one that's currently visible (highest z-index)
+    const canvas = this.page.locator('canvas[id^="main"]').first();
     await canvas.click({
       position: { x, y }
     });
@@ -228,7 +244,13 @@ export class CanvasGameTestUtils {
       case 'game':
         if (logData.event === 'initialized') {
           this.gameState.initialized = true;
-          this.gameState.canvasSize = logData.data?.canvasSize;
+          // Extract canvas size from the log data
+          if (logData.width && logData.height) {
+            this.gameState.canvasSize = { 
+              width: logData.width, 
+              height: logData.height 
+            };
+          }
         }
         break;
 
@@ -306,7 +328,9 @@ export class GameTestDataBuilder {
  */
 export class GameAssertions {
   static async assertCanvasVisible(page: Page): Promise<void> {
-    const canvas = page.locator('#main');
+    // The game creates multiple canvas elements with IDs like main1, main2, main3, main4
+    // We need to find the one that's currently visible (highest z-index)
+    const canvas = page.locator('canvas[id^="main"]').first();
     await expect(canvas).toBeVisible();
     
     // Verify canvas has actual dimensions
