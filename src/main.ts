@@ -379,7 +379,7 @@ export function initWebsocket(): void {
         //const TestSocket = require('./script/engine/tester.js'),
         //ws = new TestSocket(50, 3000);
         
-        ws.addEventListener('message', function(event) {
+        ws.addEventListener('message', async function(event) {
             const data = JSON.parse(event.data);
             gameLogger.websocketMessageReceived(data);
             
@@ -497,6 +497,10 @@ export function initWebsocket(): void {
                 
                 // Initialize the game components now that they're properly converted to TS
                 world = new World(game as any, Math.round(3.3 * Math.sqrt(Object.keys(userList).length)));
+                
+                // Wait for world generation to complete before spawning actors
+                await world.initializationPromise;
+                
                 decorator = new Decorator(game as any, world as any);
                 game.decorator = decorator;
                 users = new Users(game as any, world as any);
@@ -696,4 +700,6 @@ export function startApp(): void {
 // Auto-start the app if this module is being run in the browser (not being imported for testing)
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     startApp();
+    // Make joinServer available globally for E2E testing
+    (window as any).joinServer = joinServer;
 }
