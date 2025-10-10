@@ -1,10 +1,10 @@
 'use strict';
 
 import { EventEmitter } from 'events';
-import { util } from '../common/util.js';
-import { geometry } from '../common/geometry.js';
-import BetterCanvas from '../common/bettercanvas.js';
 import { gameLogger } from '../../gameLogger.js';
+import BetterCanvas from '../common/bettercanvas.js';
+import { geometry } from '../common/geometry.js';
+import { util } from '../common/util.js';
 
 // We'll need to convert these dependencies or use dynamic imports
 interface Slab {
@@ -72,6 +72,7 @@ export default class World extends EventEmitter {
     islands: Slab[][] = [];
     mainIsland: number = 0;
     tileMap: Record<string, Tile> = {};
+    initializationPromise: Promise<void>;
 
     constructor(game: Game, worldSize: number) {
         super();
@@ -80,7 +81,7 @@ export default class World extends EventEmitter {
         this.worldSize = Math.max(24, Math.floor(worldSize / 2) * 2); // Must be an even number >= 24
         this.worldRadius = Math.floor(this.worldSize / 2);
         
-        this.init();
+        this.initializationPromise = this.init();
     }
 
     private async init(): Promise<void> {        
@@ -161,6 +162,18 @@ export default class World extends EventEmitter {
         if (beaconIndex > -1) {
             unoccupiedGrids.splice(beaconIndex, 1); // 0,0 is taken by beacon
         }
+        
+        // Log world generation completion with spawn positions
+        gameLogger.worldGenerated({ 
+            totalTiles: Object.keys(this.map).length,
+            spawnablePositions: unoccupiedGrids.length,
+            worldSize: this.worldSize,
+            worldRadius: this.worldRadius,
+            mapBounds: this.mapBounds,
+            mainIslandSize: this.islands[this.mainIsland]?.length || 0,
+            totalIslands: this.islands.length,
+            spawnPositions: unoccupiedGrids.slice(0, 10) // Log first 10 spawn positions as sample
+        });
         
         gameLogger.info('World: Created world', { 
             tileCount: Object.keys(this.map).length 
@@ -458,6 +471,47 @@ export default class World extends EventEmitter {
             }
         }
         this.staticMap.sort(function(a, b) { return a.zDepth - b.zDepth; });
+        
+        // Log valid spawn positions for E2E testing
+        this.logValidSpawnPositions();
+    }
+
+    private logValidSpawnPositions(): void {
+        const validSpawnPositions: string[] = [];
+        const invalidSpawnPositions: string[] = [];
+        
+        // Check each grid position to see if actors can spawn there
+        for (const gridKey in this.map) {
+            if (!this.map.hasOwnProperty(gridKey)) continue;
+            
+            const slab = this.map[gridKey];
+            const x = slab.position.x;
+            const y = slab.position.y;
+            
+            // Skip beacon position (0,0) as it's reserved
+            if (x === 0 && y === 0) {
+                invalidSpawnPositions.push(`${x}:${y} (beacon)`);
+                continue;
+            }
+            
+            // Actors can spawn on grass, slab (plain), or flowers
+            // They cannot spawn on empty tiles
+            const canSpawn = slab.style === 'grass' || slab.style === 'plain' || slab.style === 'flowers';
+            
+            if (canSpawn) {
+                validSpawnPositions.push(`${x}:${y}`);
+            } else {
+                invalidSpawnPositions.push(`${x}:${y} (${slab.style})`);
+            }
+        }
+        
+        gameLogger.worldSpawnAnalysis({
+            totalPositions: Object.keys(this.map).length,
+            validSpawnPositions: validSpawnPositions.length,
+            invalidSpawnPositions: invalidSpawnPositions.length,
+            validPositions: validSpawnPositions, // Log ALL valid positions
+            invalidPositions: invalidSpawnPositions // Log ALL invalid positions
+        });
     }
 
     addToWorld(obj: WorldObject): boolean {
