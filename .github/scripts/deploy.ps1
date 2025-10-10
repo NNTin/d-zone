@@ -124,7 +124,8 @@ function Copy-DistFiles {
 function New-IndexHtmlContent {
     param([string]$Version)
     
-    return @"
+    # Use single quotes and escape properly to avoid PowerShell variable expansion
+    $htmlContent = @'
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -173,7 +174,7 @@ function New-IndexHtmlContent {
   <iframe id="content" src=""></iframe>
 
   <script>
-    const DEFAULT_VERSION = '$Version';
+    const DEFAULT_VERSION = 'VERSION_PLACEHOLDER';
     
     // Get current version from hash or use default
     function getCurrentVersion() {
@@ -195,8 +196,8 @@ function New-IndexHtmlContent {
       const content = document.getElementById('content');
       const loading = document.getElementById('loading');
       
-      versionDisplay.textContent = `Version: `${version}`;
-      versionInfo.textContent = `v`${version}`;
+      versionDisplay.textContent = `Version: ${version}`;
+      versionInfo.textContent = `v${version}`;
       
       // Build the URL for the versioned content
       let contentUrl = `${version}/`;
@@ -205,7 +206,7 @@ function New-IndexHtmlContent {
       const urlParams = new URLSearchParams(window.location.search);
       const socketURL = urlParams.get('socketURL');
       if (socketURL && preserveSocketURL) {
-        contentUrl += `?socketURL=`${encodeURIComponent(socketURL)}`;
+        contentUrl += `?socketURL=${encodeURIComponent(socketURL)}`;
       }
       
       // Load content in iframe
@@ -226,7 +227,7 @@ function New-IndexHtmlContent {
       // Handle iframe error
       content.onerror = function() {
         loading.innerHTML = `
-          <div>Error loading version `${version}`</div>
+          <div>Error loading version ${version}</div>
           <div>Please check if this version exists</div>
         `;
       };
@@ -265,7 +266,12 @@ function New-IndexHtmlContent {
   </script>
 </body>
 </html>
-"@
+'@
+
+    # Replace the placeholder with the actual version
+    $htmlContent = $htmlContent -replace 'VERSION_PLACEHOLDER', $Version
+    
+    return $htmlContent
 }
 
 function New-RootIndexHtml {
