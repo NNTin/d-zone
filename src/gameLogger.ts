@@ -130,6 +130,25 @@ class GameLogger {
     }, `World generated: ${data.totalTiles} tiles, ${data.spawnablePositions} spawn positions`);
   }
 
+  /**
+   * World spawn position analysis completed
+   */
+  worldSpawnAnalysis(data: {
+    totalPositions: number;
+    validSpawnPositions: number;
+    invalidSpawnPositions: number;
+    validPositions: string[];
+    invalidPositions: string[];
+  }): void {
+    if (!this.enabled) return;
+    this.baseLogger.info({
+      category: 'world',
+      event: 'spawn_analysis',
+      timestamp: Date.now(),
+      ...data
+    }, `Spawn analysis: ${data.validSpawnPositions} valid, ${data.invalidSpawnPositions} invalid positions`);
+  }
+
   // ===========================================
   // ACTOR SYSTEM EVENTS
   // ===========================================

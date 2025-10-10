@@ -470,6 +470,47 @@ export default class World extends EventEmitter {
             }
         }
         this.staticMap.sort(function(a, b) { return a.zDepth - b.zDepth; });
+        
+        // Log valid spawn positions for E2E testing
+        this.logValidSpawnPositions();
+    }
+
+    private logValidSpawnPositions(): void {
+        const validSpawnPositions: string[] = [];
+        const invalidSpawnPositions: string[] = [];
+        
+        // Check each grid position to see if actors can spawn there
+        for (const gridKey in this.map) {
+            if (!this.map.hasOwnProperty(gridKey)) continue;
+            
+            const slab = this.map[gridKey];
+            const x = slab.position.x;
+            const y = slab.position.y;
+            
+            // Skip beacon position (0,0) as it's reserved
+            if (x === 0 && y === 0) {
+                invalidSpawnPositions.push(`${x}:${y} (beacon)`);
+                continue;
+            }
+            
+            // Actors can spawn on grass, slab (plain), or flowers
+            // They cannot spawn on empty tiles
+            const canSpawn = slab.style === 'grass' || slab.style === 'plain' || slab.style === 'flowers';
+            
+            if (canSpawn) {
+                validSpawnPositions.push(`${x}:${y}`);
+            } else {
+                invalidSpawnPositions.push(`${x}:${y} (${slab.style})`);
+            }
+        }
+        
+        gameLogger.worldSpawnAnalysis({
+            totalPositions: Object.keys(this.map).length,
+            validSpawnPositions: validSpawnPositions.length,
+            invalidSpawnPositions: invalidSpawnPositions.length,
+            validPositions: validSpawnPositions, // Log ALL valid positions
+            invalidPositions: invalidSpawnPositions // Log ALL invalid positions
+        });
     }
 
     addToWorld(obj: WorldObject): boolean {

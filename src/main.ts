@@ -696,4 +696,6 @@ export function startApp(): void {
 // Auto-start the app if this module is being run in the browser (not being imported for testing)
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     startApp();
+    // Make joinServer available globally for E2E testing
+    (window as any).joinServer = joinServer;
 }
