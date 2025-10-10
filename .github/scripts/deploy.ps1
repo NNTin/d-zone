@@ -156,7 +156,7 @@ function New-IndexHtmlContent {
     .version-info {
       position: fixed;
       top: 10px;
-      right: 10px;
+      left: 10px;
       background: rgba(0,0,0,0.7);
       padding: 5px 10px;
       border-radius: 5px;
@@ -196,6 +196,12 @@ function New-IndexHtmlContent {
       const content = document.getElementById('content');
       const loading = document.getElementById('loading');
       
+      // Clean up any previous error content
+      const existingError = loading.querySelector('.error-content');
+      if (existingError) {
+        existingError.remove();
+      }
+      
       versionDisplay.textContent = `Version: ${version}`;
       versionInfo.textContent = `v${version}`;
       
@@ -209,28 +215,97 @@ function New-IndexHtmlContent {
         contentUrl += `?socketURL=${encodeURIComponent(socketURL)}`;
       }
       
-      // Load content in iframe
-      content.src = contentUrl;
-      
-      // Show loading state
+      // Show loading state immediately
       loading.style.display = 'block';
       content.style.display = 'none';
       versionInfo.style.display = 'none';
       
-      // Handle iframe load
-      content.onload = function() {
-        loading.style.display = 'none';
-        content.style.display = 'block';
-        versionInfo.style.display = 'block';
-      };
-      
-      // Handle iframe error
-      content.onerror = function() {
-        loading.innerHTML = `
-          <div>Error loading version ${version}</div>
-          <div>Please check if this version exists</div>
-        `;
-      };
+      // Check if version exists before loading iframe
+      fetch(contentUrl)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`Version ${version} not found (${response.status})`);
+          }
+          
+          // Version exists, load in iframe
+          content.src = contentUrl;
+          
+          // Set up iframe load handlers
+          content.onload = function() {
+            loading.style.display = 'none';
+            content.style.display = 'block';
+            versionInfo.style.display = 'block';
+          };
+          
+          // Timeout fallback in case onload doesn't fire
+          setTimeout(() => {
+            if (loading.style.display !== 'none') {
+              content.onload();
+            }
+          }, 5000);
+        })
+        .catch(error => {
+          console.error('Version load error:', error);
+          
+          // Show error message while preserving the original loading structure
+          const loadingDiv = document.getElementById('loading');
+          const versionDisplay = document.getElementById('version-display');
+          
+          // Update version display to show the problematic version
+          if (versionDisplay) {
+            versionDisplay.textContent = `Version: ${version} (Not Found)`;
+          }
+          
+          // Create error content without replacing the entire loading div
+          const errorContent = document.createElement('div');
+          errorContent.innerHTML = `
+            <div style="color: #ff6b6b; margin-bottom: 20px; margin-top: 20px;">
+              <h3>Version Not Found</h3>
+              <p>Version "${version}" does not exist.</p>
+              <p>Available actions:</p>
+            </div>
+            <div style="margin-top: 15px;">
+              <button onclick="window.switchToVersion('VERSION_PLACEHOLDER')" style="
+                background: #4ECDC4; 
+                color: white; 
+                border: none; 
+                padding: 10px 20px; 
+                margin: 5px; 
+                border-radius: 5px; 
+                cursor: pointer;
+                font-size: 14px;
+              ">Go to Default Version</button>
+              <button onclick="history.back()" style="
+                background: #95E1D3; 
+                color: #333; 
+                border: none; 
+                padding: 10px 20px; 
+                margin: 5px; 
+                border-radius: 5px; 
+                cursor: pointer;
+                font-size: 14px;
+              ">Go Back</button>
+            </div>
+            <div style="margin-top: 20px; font-size: 12px; color: #888;">
+              <p>Error: ${error.message}</p>
+            </div>
+          `;
+          
+          // Remove any existing error content
+          const existingError = loadingDiv.querySelector('.error-content');
+          if (existingError) {
+            existingError.remove();
+          }
+          
+          // Add error class for identification and append error content
+          errorContent.className = 'error-content';
+          loadingDiv.appendChild(errorContent);
+          
+          // Ensure loading div is visible and hide iframe
+          loading.style.display = 'block';
+          content.style.display = 'none';
+          versionInfo.style.display = 'none';
+        });
     }
     
     // Handle hash changes (for manual navigation or back/forward)
