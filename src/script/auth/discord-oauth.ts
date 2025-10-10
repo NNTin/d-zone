@@ -1,6 +1,7 @@
 'use strict';
 
 import { EventEmitter } from 'events';
+import { gameLogger } from '../../gameLogger.js';
 
 interface DiscordOAuthOptions {
     clientId: string;
@@ -70,7 +71,7 @@ export class DiscordOAuth extends EventEmitter {
 
     login(): void {
         const authUrl = this.getAuthUrl();
-        console.log('Starting Discord OAuth login with URL:', authUrl);
+        gameLogger.info('Starting Discord OAuth login', { authUrl });
         
         // Store state for verification
         localStorage.setItem('discord_oauth_state', this.state);
@@ -79,21 +80,27 @@ export class DiscordOAuth extends EventEmitter {
         const popup = window.open(authUrl, 'discord_oauth', 'width=500,height=700,scrollbars=yes');
         
         if (!popup) {
-            console.error('Popup was blocked by browser');
+            gameLogger.error('Discord OAuth popup was blocked by browser');
             this.emit('login-error', 'Popup was blocked by browser. Please allow popups for this site.');
             return;
         }
         
-        console.log('Discord OAuth popup opened successfully');
+        gameLogger.debug('Discord OAuth popup opened successfully');
         
         const self = this;
         
         // Listen for messages from the popup
         const messageHandler = (event: MessageEvent) => {
-            console.log('Received message from popup:', event.data, 'from origin:', event.origin);
+            gameLogger.debug('Received message from Discord OAuth popup', { 
+                type: event.data?.type, 
+                origin: event.origin 
+            });
             
             if (event.origin !== window.location.origin) {
-                console.log('Ignoring message from different origin:', event.origin);
+                gameLogger.debug('Ignoring message from different origin', { 
+                    expectedOrigin: window.location.origin, 
+                    receivedOrigin: event.origin 
+                });
                 return;
             }
             
@@ -105,12 +112,18 @@ export class DiscordOAuth extends EventEmitter {
                 const state = successData.state;
                 const expiresIn = successData.expiresIn;
                 
-                console.log('Discord auth success received, access token length:', accessToken ? accessToken.length : 0);
+                gameLogger.info('Discord OAuth success received', { 
+                    accessTokenLength: accessToken ? accessToken.length : 0,
+                    state: state
+                });
                 
                 window.removeEventListener('message', messageHandler);
                 
                 if (state !== self.state) {
-                    console.error('State mismatch. Expected:', self.state, 'Received:', state);
+                    gameLogger.error('Discord OAuth state mismatch', { 
+                        expected: self.state, 
+                        received: state 
+                    });
                     self.emit('login-error', 'Invalid state parameter');
                     return;
                 }
@@ -120,12 +133,12 @@ export class DiscordOAuth extends EventEmitter {
                     self.storeAuth({ access_token: accessToken, expires_in: expiresIn });
                     self.fetchUserInfo();
                 } else {
-                    console.error('No access token in success message');
+                    gameLogger.error('No access token in Discord OAuth success message');
                     self.emit('login-error', 'No access token received');
                 }
             } else if (data.type === 'discord-auth-error') {
                 const errorData = data as AuthErrorMessage;
-                console.error('Discord auth error received:', errorData.error);
+                gameLogger.error('Discord OAuth error received', { error: errorData.error });
                 window.removeEventListener('message', messageHandler);
                 self.emit('login-error', errorData.error);
             }
@@ -136,7 +149,7 @@ export class DiscordOAuth extends EventEmitter {
         // Fallback: Check if popup was closed
         const pollTimer = setInterval(() => {
             if (popup.closed) {
-                console.log('Discord OAuth popup was closed');
+                gameLogger.info('Discord OAuth popup was closed by user');
                 clearInterval(pollTimer);
                 window.removeEventListener('message', messageHandler);
                 self.emit('login-cancelled');

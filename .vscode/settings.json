@@ -1,0 +1,29 @@
+{
+  "typescript.preferences.includePackageJsonAutoImports": "auto",
+  "typescript.suggest.autoImports": true,
+  "files.associations": {
+    "*.test.ts": "typescript",
+    "*.e2e.ts": "typescript"
+  },
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "explicit"
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/coverage": true,
+    "**/allure-results": true,
+    "**/allure-report": true,
+    "**/test-results": true,
+    "**/playwright-report": true
+  },
+  "files.exclude": {
+    "**/coverage": true,
+    "**/allure-results": true,
+    "**/allure-report": true,
+    "**/test-results": true,
+    "**/playwright-report": true
+  },
+  "testing.automaticallyOpenPeekView": "never",
+  "testing.followRunningTest": false,
+  "typescript.preferences.useLabelDetailsInCompletionEntries": true
+}

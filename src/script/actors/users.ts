@@ -1,6 +1,7 @@
 'use strict';
 
 import { EventEmitter } from 'events';
+import { gameLogger } from '../../gameLogger.js';
 
 interface UserData {
     uid: string;
@@ -72,7 +73,9 @@ export default class Users extends EventEmitter {
             const ActorModule = await import('./actor.js');
             ActorClass = ActorModule.default;
         } catch (error) {
-            console.error('Failed to load Actor class:', error);
+            gameLogger.error('Failed to load Actor class', { 
+                error: error instanceof Error ? error.message : String(error) 
+            });
             throw error;
         }
     }
@@ -84,7 +87,7 @@ export default class Users extends EventEmitter {
         }
 
         if (!ActorClass) {
-            console.error('❌ Actor class not loaded yet');
+            gameLogger.error('Actor class not loaded yet');
             return;
         }
 

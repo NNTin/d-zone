@@ -1,6 +1,7 @@
 'use strict';
 
 import { EventEmitter } from 'events';
+import { gameLogger } from '../../gameLogger.js';
 
 import { geometry } from '../common/geometry.js';
 
@@ -58,14 +59,16 @@ export default class Decorator extends EventEmitter {
 
             this.createBeacon();
         } catch (error) {
-            console.error('Failed to load decorator dependencies:', error);
+            gameLogger.error('Decorator: Failed to load dependencies', {
+                error: error instanceof Error ? error.message : String(error)
+            });
             throw error;
         }
     }
 
     sewSeed(options: SewSeedOptions): void {
         if (!SeedClass) {
-            console.error('Seed class not loaded yet');
+            gameLogger.error('Decorator: Seed class not loaded yet');
             return;
         }
 
@@ -92,7 +95,7 @@ export default class Decorator extends EventEmitter {
 
     private createBeacon(): void {
         if (!BeaconClass) {
-            console.error('Beacon class not loaded yet');
+            gameLogger.error('Decorator: Beacon class not loaded yet');
             return;
         }
 

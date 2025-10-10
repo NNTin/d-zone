@@ -2,6 +2,7 @@
 
 import { EventEmitter } from 'events';
 import { ColorUtil } from '../common/colorutil.js';
+import { gameLogger } from '../../gameLogger.js';
 
 interface RendererOptions {
     game: any;
@@ -132,8 +133,10 @@ export class Renderer extends EventEmitter {
         options.image = this.images[options.sheet];
         
         if (!options.image) {
-            console.error('Renderer.addColorSheet - Base image not found:', options.sheet);
-            console.error('Available images:', Object.keys(this.images));
+            gameLogger.error('Renderer addColorSheet: Base image not found', {
+                requestedSheet: options.sheet,
+                availableImages: Object.keys(this.images)
+            });
             return;
         }
         
