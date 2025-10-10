@@ -257,8 +257,8 @@ test.describe('@critical Actor Spawn Validation', () => {
           console.log(`📍 Valid positions sample: ${validSpawnPositions.slice(0, 10).join(', ')}`);
           console.log(`🚫 Invalid positions: ${invalidSpawnPositions.join(', ')}`);
           
-          // This is the bug we expect to find - let the test fail to demonstrate it
-          expect(isValidPosition).toBe(true); // This may fail and that's expected
+          // The test should fail when actors spawn at invalid positions
+          expect(isValidPosition).toBe(true);
         } else {
           console.log(`✓ Actor ${username} spawned at VALID position (${x}, ${y}, ${z})`);
         }
@@ -478,7 +478,9 @@ test.describe('@critical Actor Spawn Validation', () => {
             if (!spawnedInValidPosition) {
               console.log(`❌ Actor ${username} spawned at INVALID position (${x}, ${y}, ${z}) - not in new world's valid spawn list`);
               console.log(`📍 Sample valid positions: ${newValidSpawnPositions.slice(0, 5).join(', ')}`);
-              // This may reveal the spawn bug the user mentioned
+              
+              // The test should fail when actors spawn at invalid positions
+              expect(spawnedInValidPosition).toBe(true);
             }
           }
           
@@ -487,10 +489,12 @@ test.describe('@critical Actor Spawn Validation', () => {
             validActors++;
           } else {
             if (!isValidX || !isValidY || !isValidZ) {
-              console.log(`⚠️  Actor ${username} has invalid coordinates: (${x}, ${y}, ${z}) - non-integer values detected`);
+              console.log(`❌ Actor ${username} has invalid coordinates: (${x}, ${y}, ${z}) - non-integer values detected`);
+              expect(isValidX && isValidY && isValidZ).toBe(true);
             }
             if (!spawnedInValidPosition) {
-              console.log(`⚠️  Actor ${username} spawned at invalid world position: (${x}, ${y}, ${z})`);
+              console.log(`❌ Actor ${username} spawned at invalid world position: (${x}, ${y}, ${z})`);
+              expect(spawnedInValidPosition).toBe(true);
             }
             invalidActors++;
           }
@@ -508,11 +512,8 @@ test.describe('@critical Actor Spawn Validation', () => {
       
       console.log(`📊 Coordinate validation summary: ${validActors} valid, ${invalidActors} invalid actors`);
       
-      // Report the results but don't fail the test if invalid coordinates are found
-      // (since user mentioned this is a known bug)
-      if (invalidActors > 0) {
-        console.log(`⚠️  Detected ${invalidActors} actors with invalid coordinates - this may be the known spawn bug`);
-      }
+      // All actors should have valid coordinates - the test should fail if any don't
+      expect(invalidActors).toBe(0);
       
       // Ensure at least some actors were processed
       expect(validActors + invalidActors).toBeGreaterThan(0);
