@@ -1,6 +1,6 @@
 {
   "name": "d-zone",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "An ambient life simulation driven by the user activity within a Discord server",
   "type": "module",
   "main": "index.ts",
