@@ -4,8 +4,8 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createJoinServerMessage, getStartupServer, util, type DiscordAuth, type GameState } from '../src/websocket-utils';
-import { MockLocalStorage } from './utils/testHelpers';
+import { createJoinServerMessage, getStartupServer, util, type DiscordAuth, type GameState } from '../src/websocket-utils.js';
+import { MockLocalStorage } from './utils/testHelpers.js';
 
 // Create instance of mock localStorage
 const mockLocalStorage = new MockLocalStorage();
