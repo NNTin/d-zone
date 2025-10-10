@@ -72,6 +72,7 @@ export default class World extends EventEmitter {
     islands: Slab[][] = [];
     mainIsland: number = 0;
     tileMap: Record<string, Tile> = {};
+    initializationPromise: Promise<void>;
 
     constructor(game: Game, worldSize: number) {
         super();
@@ -80,7 +81,7 @@ export default class World extends EventEmitter {
         this.worldSize = Math.max(24, Math.floor(worldSize / 2) * 2); // Must be an even number >= 24
         this.worldRadius = Math.floor(this.worldSize / 2);
         
-        this.init();
+        this.initializationPromise = this.init();
     }
 
     private async init(): Promise<void> {        
