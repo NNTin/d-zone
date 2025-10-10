@@ -145,11 +145,10 @@ jobs:
           echo "Available test files:"
           find tests -name "*.e2e.ts" -o -name "*.e2e.js"
           echo ""
-          echo "Running Playwright with sharding..."
-          # Let Playwright use the reporters defined in config (including allure-playwright)
-          # Use shard-specific project name for better Allure suite separation
+          echo "Running all E2E tests on shard ${{ matrix.shard }}..."
+          # Run all tests on this shard with shard-specific project name for Allure reporting
           PROJECT_NAME="ci-shard-${{ matrix.shard }}"
-          npx playwright test --project=$PROJECT_NAME --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+          npx playwright test --project=$PROJECT_NAME
           
           # Check exit code and show any issues
           EXIT_CODE=$?
