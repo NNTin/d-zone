@@ -2,7 +2,7 @@
  * Test utilities and helper functions
  */
 
-import { expect } from '@playwright/test';
+import { expect } from 'vitest';
 
 /**
  * Mock localStorage implementation for unit tests
@@ -57,39 +57,50 @@ export class MockLocalStorage implements Storage {
 }
 
 /**
- * Custom test assertions for game-specific testing
+ * Custom test assertions for game-specific unit testing
  */
 export class GameTestAssertions {
   /**
-   * Assert that an actor is visible on the game canvas
+   * Assert that an actor object has the expected properties
    */
-  static async assertActorVisible(page: any, actorName: string) {
-    const actor = page.locator(`[data-testid="actor-${actorName}"]`);
-    await expect(actor).toBeVisible();
+  static assertActorValid(actor: any, expectedName?: string) {
+    expect(actor).toBeDefined();
+    expect(actor).toHaveProperty('uid');
+    expect(actor).toHaveProperty('username');
+    expect(actor).toHaveProperty('x');
+    expect(actor).toHaveProperty('y');
+    expect(actor).toHaveProperty('z');
+    
+    if (expectedName) {
+      expect(actor.username).toBe(expectedName);
+    }
   }
 
   /**
-   * Assert that a nametag is displayed
+   * Assert that coordinates are within expected bounds
    */
-  static async assertNametagVisible(page: any, username: string) {
-    const nametag = page.locator(`[data-testid="nametag-${username}"]`);
-    await expect(nametag).toBeVisible();
+  static assertCoordinatesValid(x: number, y: number, z: number, bounds?: { minX?: number, maxX?: number, minY?: number, maxY?: number, minZ?: number, maxZ?: number }) {
+    expect(typeof x).toBe('number');
+    expect(typeof y).toBe('number');
+    expect(typeof z).toBe('number');
+    
+    if (bounds) {
+      if (bounds.minX !== undefined) expect(x).toBeGreaterThanOrEqual(bounds.minX);
+      if (bounds.maxX !== undefined) expect(x).toBeLessThanOrEqual(bounds.maxX);
+      if (bounds.minY !== undefined) expect(y).toBeGreaterThanOrEqual(bounds.minY);
+      if (bounds.maxY !== undefined) expect(y).toBeLessThanOrEqual(bounds.maxY);
+      if (bounds.minZ !== undefined) expect(z).toBeGreaterThanOrEqual(bounds.minZ);
+      if (bounds.maxZ !== undefined) expect(z).toBeLessThanOrEqual(bounds.maxZ);
+    }
   }
 
   /**
-   * Assert that movement animation is playing
+   * Assert that a game state object is valid
    */
-  static async assertMovementAnimation(page: any, actorName: string) {
-    const actor = page.locator(`[data-testid="actor-${actorName}"]`);
-    await expect(actor).toHaveClass(/moving/);
-  }
-
-  /**
-   * Wait for game to be fully loaded
-   */
-  static async waitForGameLoad(page: any) {
-    await page.waitForSelector('[data-testid="game-canvas"]');
-    await page.waitForFunction(() => window.gameLoaded === true);
+  static assertGameStateValid(gameState: any) {
+    expect(gameState).toBeDefined();
+    expect(gameState).toHaveProperty('initialized');
+    expect(typeof gameState.initialized).toBe('boolean');
   }
 }
 
@@ -122,33 +133,45 @@ export class TestDataBuilder {
 }
 
 /**
- * Performance testing utilities
+ * Performance testing utilities for unit tests
  */
 export class PerformanceUtils {
-  static async measureLoadTime(page: any) {
+  /**
+   * Measure execution time of a function
+   */
+  static async measureExecutionTime(fn: () => Promise<void> | void): Promise<number> {
     const start = Date.now();
-    await GameTestAssertions.waitForGameLoad(page);
+    await fn();
     const end = Date.now();
     return end - start;
   }
 
-  static async measureFrameRate(page: any, duration = 5000) {
-    return await page.evaluate((duration) => {
-      return new Promise((resolve) => {
-        let frames = 0;
-        const start = performance.now();
-        
-        function countFrame() {
-          frames++;
-          if (performance.now() - start < duration) {
-            requestAnimationFrame(countFrame);
-          } else {
-            resolve(frames / (duration / 1000));
-          }
-        }
-        
-        requestAnimationFrame(countFrame);
-      });
-    }, duration);
+  /**
+   * Create a performance benchmark for repeated operations
+   */
+  static async benchmark(fn: () => Promise<void> | void, iterations = 100): Promise<{ averageTime: number, totalTime: number, iterations: number }> {
+    const times: number[] = [];
+    
+    for (let i = 0; i < iterations; i++) {
+      const time = await this.measureExecutionTime(fn);
+      times.push(time);
+    }
+    
+    const totalTime = times.reduce((sum, time) => sum + time, 0);
+    const averageTime = totalTime / iterations;
+    
+    return {
+      averageTime,
+      totalTime,
+      iterations
+    };
+  }
+
+  /**
+   * Assert that an operation completes within a time limit
+   */
+  static async assertPerformance(fn: () => Promise<void> | void, maxTimeMs: number): Promise<void> {
+    const time = await this.measureExecutionTime(fn);
+    expect(time).toBeLessThanOrEqual(maxTimeMs);
   }
 }

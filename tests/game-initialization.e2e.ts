@@ -75,7 +75,7 @@ test.describe('@critical Game Initialization', () => {
 
     // Check canvas tag and basic properties
     const tagName = await canvas.evaluate((el: HTMLElement) => el.tagName);
-    expect(tagName).toBe('CANVAS');    // Verify canvas has dimensions
+    expect(tagName).toBe('CANVAS');
     const box = await canvas.boundingBox();
     expect(box).toBeTruthy();
     expect(box!.width).toBeGreaterThan(0);
