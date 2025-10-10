@@ -1,53 +1,130 @@
-# PowerShell script to simulate the "Build for production" step from deploy.yml
-# Usage: .\deploy.ps1 -Version "1.0.0"
+# ============================================================================
+# D-Zone Deployment Build Script
+# ============================================================================
+#
+# Description:
+#   This script replicates the "Build for production" step from the GitHub 
+#   Actions deploy.yml workflow. It builds the D-Zone application for 
+#   deployment with versioned hash-based routing.
+#
+# Usage:
+#   .\deploy.ps1 -Version "1.0.0"
+#   .\.github\scripts\deploy.ps1 -Version "test-build"
+#
+# Parameters:
+#   -Version: Required. The version identifier for this deployment build.
+#             This will be used as the folder name and default version.
+#
+# Output:
+#   Creates a 'build' directory structure:
+#   - build/index.html (root router with hash-based routing)
+#   - build/{version}/ (versioned application files)
+#
+# Examples:
+#   .\deploy.ps1 -Version "1.0.0"
+#   .\deploy.ps1 -Version "feature-test"
+#   .\deploy.ps1 -Version "2024-10-11-hotfix"
+#
+# ============================================================================
 
 param(
     [Parameter(Mandatory=$true)]
     [string]$Version
 )
 
-Write-Host "Starting local deployment build for version: $Version" -ForegroundColor Green
+# ============================================================================
+# PREPARATION - Static Variables
+# ============================================================================
 
-# Set working directory to repository root
-$RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-Set-Location $RepoRoot
+# Calculate absolute paths using script location
+$ScriptDir = $PSScriptRoot
+$RepoRoot = Split-Path -Parent (Split-Path -Parent $ScriptDir)
+$BuildDir = Join-Path $RepoRoot "build"
+$VersionDir = Join-Path $BuildDir $Version
+$DistDir = Join-Path $RepoRoot "dist"
+$IndexHtmlPath = Join-Path $BuildDir "index.html"
 
-Write-Host "Working directory: $(Get-Location)" -ForegroundColor Yellow
+# Script configuration
+$ErrorActionPreference = "Stop"
 
-# Create build directory structure
-Write-Host "Creating build directory structure..." -ForegroundColor Cyan
-$BuildDir = "build"
-$VersionDir = "$BuildDir/$Version"
+# ============================================================================
+# FUNCTIONS - Grouped by Task
+# ============================================================================
 
-if (Test-Path $BuildDir) {
-    Write-Host "Cleaning existing build directory..." -ForegroundColor Yellow
-    Remove-Item $BuildDir -Recurse -Force
+function Write-ScriptHeader {
+    param([string]$Version)
+    
+    Write-Host "============================================================================" -ForegroundColor Magenta
+    Write-Host "D-Zone Deployment Build Script" -ForegroundColor Magenta
+    Write-Host "============================================================================" -ForegroundColor Magenta
+    Write-Host "Version: $Version" -ForegroundColor Green
+    Write-Host "Repository Root: $RepoRoot" -ForegroundColor Yellow
+    Write-Host "Build Directory: $BuildDir" -ForegroundColor Yellow
+    Write-Host "Working Directory: $(Get-Location)" -ForegroundColor Yellow
+    Write-Host ""
 }
 
-New-Item -ItemType Directory -Path $VersionDir -Force | Out-Null
-
-# Run production build
-Write-Host "Running production build..." -ForegroundColor Cyan
-npm run build:prod
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Production build failed!"
-    exit 1
+function Initialize-BuildEnvironment {
+    Write-Host "Setting up build environment..." -ForegroundColor Cyan
+    
+    # Change to repository root directory
+    Set-Location $RepoRoot
+    Write-Host "✓ Changed to repository root: $RepoRoot" -ForegroundColor Green
+    
+    # Clean and create build directory structure
+    if (Test-Path $BuildDir) {
+        Write-Host "Cleaning existing build directory..." -ForegroundColor Yellow
+        Remove-Item $BuildDir -Recurse -Force
+    }
+    
+    New-Item -ItemType Directory -Path $VersionDir -Force | Out-Null
+    Write-Host "✓ Created build directory structure" -ForegroundColor Green
 }
 
-# Copy dist files to version directory
-Write-Host "Copying dist files to version directory..." -ForegroundColor Cyan
-if (Test-Path "dist") {
-    Copy-Item -Path "dist\*" -Destination $VersionDir -Recurse -Force
-    Write-Host "✓ Copied dist files to $VersionDir" -ForegroundColor Green
-} else {
-    Write-Error "dist directory not found! Build may have failed."
-    exit 1
+function Invoke-ProductionBuild {
+    Write-Host "Running production build..." -ForegroundColor Cyan
+    
+    try {
+        npm run build:prod
+        if ($LASTEXITCODE -ne 0) {
+            throw "npm run build:prod exited with code $LASTEXITCODE"
+        }
+        Write-Host "✓ Production build completed successfully" -ForegroundColor Green
+    }
+    catch {
+        Write-Error "Production build failed: $_"
+        exit 1
+    }
 }
 
-# Create root index.html with hash-based routing
-Write-Host "Creating root index.html..." -ForegroundColor Cyan
-$IndexHtml = @"
+function Copy-DistFiles {
+    Write-Host "Copying distribution files..." -ForegroundColor Cyan
+    
+    if (-not (Test-Path $DistDir)) {
+        Write-Error "Distribution directory not found at: $DistDir"
+        exit 1
+    }
+    
+    try {
+        $DistItems = Get-ChildItem -Path $DistDir -Recurse
+        if ($DistItems.Count -eq 0) {
+            Write-Error "Distribution directory is empty: $DistDir"
+            exit 1
+        }
+        
+        Copy-Item -Path "$DistDir\*" -Destination $VersionDir -Recurse -Force
+        Write-Host "✓ Copied $($DistItems.Count) items from dist to version directory" -ForegroundColor Green
+    }
+    catch {
+        Write-Error "Failed to copy distribution files: $_"
+        exit 1
+    }
+}
+
+function New-IndexHtmlContent {
+    param([string]$Version)
+    
+    return @"
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -96,7 +173,7 @@ $IndexHtml = @"
   <iframe id="content" src=""></iframe>
 
   <script>
-    const DEFAULT_VERSION = 'VERSION_PLACEHOLDER';
+    const DEFAULT_VERSION = '$Version';
     
     // Get current version from hash or use default
     function getCurrentVersion() {
@@ -118,17 +195,17 @@ $IndexHtml = @"
       const content = document.getElementById('content');
       const loading = document.getElementById('loading');
       
-      versionDisplay.textContent = `Version: $${version}`;
-      versionInfo.textContent = `v$${version}`;
+      versionDisplay.textContent = `Version: `${version}`;
+      versionInfo.textContent = `v`${version}`;
       
       // Build the URL for the versioned content
-      let contentUrl = `$${version}/`;
+      let contentUrl = `${version}/`;
       
       // Preserve socketURL parameter if present and requested
       const urlParams = new URLSearchParams(window.location.search);
       const socketURL = urlParams.get('socketURL');
       if (socketURL && preserveSocketURL) {
-        contentUrl += `?socketURL=$${encodeURIComponent(socketURL)}`;
+        contentUrl += `?socketURL=`${encodeURIComponent(socketURL)}`;
       }
       
       // Load content in iframe
@@ -149,7 +226,7 @@ $IndexHtml = @"
       // Handle iframe error
       content.onerror = function() {
         loading.innerHTML = `
-          <div>Error loading version $${version}</div>
+          <div>Error loading version `${version}`</div>
           <div>Please check if this version exists</div>
         `;
       };
@@ -189,40 +266,102 @@ $IndexHtml = @"
 </body>
 </html>
 "@
-
-# Write the HTML content to file
-$IndexHtml | Out-File -FilePath "$BuildDir\index.html" -Encoding UTF8
-
-# Replace the placeholder with actual version
-Write-Host "Replacing version placeholder..." -ForegroundColor Cyan
-$IndexContent = Get-Content "$BuildDir\index.html" -Raw
-$IndexContent = $IndexContent -replace 'VERSION_PLACEHOLDER', $Version
-$IndexContent | Out-File -FilePath "$BuildDir\index.html" -Encoding UTF8 -NoNewline
-
-Write-Host "✓ Created root index.html with version $Version" -ForegroundColor Green
-
-# Display build summary
-Write-Host "`n=== Build Summary ===" -ForegroundColor Magenta
-Write-Host "Version: $Version" -ForegroundColor White
-Write-Host "Build directory: $BuildDir" -ForegroundColor White
-Write-Host "Version directory: $VersionDir" -ForegroundColor White
-
-if (Test-Path $VersionDir) {
-    $VersionFiles = Get-ChildItem $VersionDir -Recurse | Measure-Object
-    Write-Host "Files in version directory: $($VersionFiles.Count)" -ForegroundColor White
 }
 
-if (Test-Path "$BuildDir\index.html") {
-    $IndexSize = (Get-Item "$BuildDir\index.html").Length
-    Write-Host "Root index.html size: $IndexSize bytes" -ForegroundColor White
+function New-RootIndexHtml {
+    param([string]$Version)
+    
+    Write-Host "Creating root index.html with hash-based routing..." -ForegroundColor Cyan
+    
+    try {
+        $IndexContent = New-IndexHtmlContent -Version $Version
+        $IndexContent | Out-File -FilePath $IndexHtmlPath -Encoding UTF8 -NoNewline
+        
+        $IndexSize = (Get-Item $IndexHtmlPath).Length
+        Write-Host "✓ Created root index.html ($IndexSize bytes) with version $Version" -ForegroundColor Green
+    }
+    catch {
+        Write-Error "Failed to create root index.html: $_"
+        exit 1
+    }
 }
 
-Write-Host "`n=== Next Steps ===" -ForegroundColor Magenta
-Write-Host "1. Serve the build directory with a local web server" -ForegroundColor Yellow
-Write-Host "2. Test the hash-based routing by navigating to different versions" -ForegroundColor Yellow
-Write-Host "3. Example commands to serve locally:" -ForegroundColor Yellow
-Write-Host "   - Python: python -m http.server 8080 --directory build" -ForegroundColor Cyan
-Write-Host "   - Node.js: npx serve build -p 8080" -ForegroundColor Cyan
-Write-Host "   - PHP: php -S localhost:8080 -t build" -ForegroundColor Cyan
+function Write-BuildSummary {
+    param([string]$Version)
+    
+    Write-Host "`n============================================================================" -ForegroundColor Magenta
+    Write-Host "BUILD SUMMARY" -ForegroundColor Magenta
+    Write-Host "============================================================================" -ForegroundColor Magenta
+    
+    Write-Host "Version: $Version" -ForegroundColor White
+    Write-Host "Build directory: $BuildDir" -ForegroundColor White
+    Write-Host "Version directory: $VersionDir" -ForegroundColor White
+    
+    if (Test-Path $VersionDir) {
+        $VersionFiles = Get-ChildItem $VersionDir -Recurse | Measure-Object
+        Write-Host "Files in version directory: $($VersionFiles.Count)" -ForegroundColor White
+    }
+    
+    if (Test-Path $IndexHtmlPath) {
+        $IndexSize = (Get-Item $IndexHtmlPath).Length
+        Write-Host "Root index.html size: $IndexSize bytes" -ForegroundColor White
+    }
+}
 
-Write-Host "`nBuild completed successfully! 🚀" -ForegroundColor Green
+function Write-NextSteps {
+    Write-Host "`n============================================================================" -ForegroundColor Magenta
+    Write-Host "NEXT STEPS" -ForegroundColor Magenta
+    Write-Host "============================================================================" -ForegroundColor Magenta
+    
+    Write-Host "1. Serve the build directory with a local web server" -ForegroundColor Yellow
+    Write-Host "2. Test the hash-based routing by navigating to different versions" -ForegroundColor Yellow
+    Write-Host "3. Example commands to serve locally:" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "   # Using Node.js serve" -ForegroundColor Cyan
+    Write-Host "   npx serve `"$BuildDir`" -p 8080" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "   # Using Python" -ForegroundColor Cyan
+    Write-Host "   python -m http.server 8080 --directory `"$BuildDir`"" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "   # Using PHP" -ForegroundColor Cyan
+    Write-Host "   php -S localhost:8080 -t `"$BuildDir`"" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "4. Test URLs:" -ForegroundColor Yellow
+    Write-Host "   - Default version: http://localhost:8080" -ForegroundColor Cyan
+    Write-Host "   - Specific version: http://localhost:8080#$Version" -ForegroundColor Cyan
+    Write-Host ""
+}
+
+# ============================================================================
+# SCRIPT - Main Execution
+# ============================================================================
+
+try {
+    # Display script header
+    Write-ScriptHeader -Version $Version
+    
+    # Initialize build environment
+    Initialize-BuildEnvironment
+    
+    # Run production build
+    Invoke-ProductionBuild
+    
+    # Copy distribution files to version directory
+    Copy-DistFiles
+    
+    # Create root index.html with hash-based routing
+    New-RootIndexHtml -Version $Version
+    
+    # Display build summary
+    Write-BuildSummary -Version $Version
+    
+    # Show next steps
+    Write-NextSteps
+    
+    Write-Host "Build completed successfully! 🚀" -ForegroundColor Green
+}
+catch {
+    Write-Host "`n❌ BUILD FAILED" -ForegroundColor Red
+    Write-Host "Error: $_" -ForegroundColor Red
+    exit 1
+}
