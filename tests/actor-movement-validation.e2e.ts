@@ -8,9 +8,13 @@
  * 2. Movement coordinates match the valid spawn positions from world generation
  * 3. No invalid movement coordinates occur during simulation
  * 4. Movement follows game rules (grid-based, walkable tiles only)
+ * 5. **CRITICAL BUG DETECTION**: Hopping animations correspond to actual actor movement
  * 
  * The tests connect to the repos server which has >20 actors to provide comprehensive
- * movement validation data during a 15-second simulation period.
+ * movement validation data during monitoring periods.
+ * 
+ * Key bug being detected: Hopping animations play without corresponding actor movement,
+ * indicating the animation system is decoupled from the actual movement system.
  */
 
 import { expect, test } from '@playwright/test';
@@ -111,8 +115,8 @@ test.describe('@critical Actor Movement Validation', () => {
       expect(actorSpawnLogs.length).toBeGreaterThanOrEqual(20);
     }
     
-    // Clear logs and start monitoring movement for 15 seconds
-    console.log('🏃 Starting 15-second movement monitoring...');
+    // Clear logs and start monitoring movement and animations for 15 seconds
+    console.log('🏃 Starting 15-second movement and animation monitoring...');
     gameUtils.clearLogs();
     
     const movementStartTime = Date.now();
@@ -125,108 +129,331 @@ test.describe('@critical Actor Movement Validation', () => {
     const movementLogs = gameUtils.getLogsByCategory('actor')
       .filter(log => log.event === 'moved');
     
-    console.log(`📊 Captured ${movementLogs.length} movement events during monitoring`);
+    // Collect all hopping animation events during the monitoring period
+    const hoppingAnimationLogs = gameUtils.getLogsByCategory('actor')
+      .filter(log => log.event === 'animationStarted' && log.data.animationType === 'hopping');
     
-    if (movementLogs.length === 0) {
-      console.log('❌ No movement events detected - actors should be moving on repos server');
-      // Fail the test if no movement is detected - this indicates a problem
-      expect(movementLogs.length).toBeGreaterThan(0);
+    console.log(`📊 Captured ${movementLogs.length} movement events and ${hoppingAnimationLogs.length} hopping animations during monitoring`);
+    
+    console.log(`📊 Captured ${movementLogs.length} movement events and ${hoppingAnimationLogs.length} hopping animations during monitoring`);
+    
+    // Critical bug detection: Validate that hopping animations correspond to actual movements
+    console.log('🔍 Validating hopping animations correspond to actual movements...');
+    
+    // Group movements by actor and timestamp
+    const movementsByActor = new Map<string, Array<{timestamp: number, fromX: number, fromY: number, toX: number, toY: number}>>();
+    for (const movementLog of movementLogs) {
+      const { uid, fromX, fromY, toX, toY } = movementLog.data;
+      if (!movementsByActor.has(uid)) {
+        movementsByActor.set(uid, []);
+      }
+      movementsByActor.get(uid)!.push({
+        timestamp: movementLog.timestamp,
+        fromX, fromY, toX, toY
+      });
+    }
+    
+    // Check each hopping animation for corresponding movement
+    let hoppingAnimationsWithoutMovement = 0;
+    let hoppingAnimationsWithMovement = 0;
+    const problematicHops: any[] = [];
+    
+    for (const hoppingLog of hoppingAnimationLogs) {
+      const { uid, username } = hoppingLog.data;
+      const hoppingTimestamp = hoppingLog.timestamp;
+      
+      // Look for movements by this actor within a reasonable time window (±2 seconds) of the hopping animation
+      const actorMovements = movementsByActor.get(uid) || [];
+      const timeWindow = 2000; // 2 seconds
+      
+      const correspondingMovement = actorMovements.find(movement => 
+        Math.abs(movement.timestamp - hoppingTimestamp) <= timeWindow
+      );
+      
+      if (correspondingMovement) {
+        hoppingAnimationsWithMovement++;
+        console.log(`✓ Hopping animation for ${username || uid} has corresponding movement: (${correspondingMovement.fromX}, ${correspondingMovement.fromY}) → (${correspondingMovement.toX}, ${correspondingMovement.toY})`);
+      } else {
+        hoppingAnimationsWithoutMovement++;
+        problematicHops.push({
+          actor: username || uid,
+          uid,
+          timestamp: hoppingTimestamp,
+          timeWindowStart: new Date(hoppingTimestamp - timeWindow).toISOString(),
+          timeWindowEnd: new Date(hoppingTimestamp + timeWindow).toISOString()
+        });
+        console.log(`❌ Hopping animation for ${username || uid} has NO corresponding movement within ±${timeWindow/1000}s`);
+      }
+    }
+    
+    console.log(`📊 Hopping animation analysis:`);
+    console.log(`  Hopping animations with movement: ${hoppingAnimationsWithMovement}`);
+    console.log(`  Hopping animations WITHOUT movement: ${hoppingAnimationsWithoutMovement}`);
+    
+    // Report problematic hopping animations
+    if (hoppingAnimationsWithoutMovement > 0) {
+      console.log('❌ Problematic hopping animations (animation without movement):');
+      for (const hop of problematicHops) {
+        console.log(`  - ${hop.actor} at ${new Date(hop.timestamp).toISOString()}`);
+      }
+      
+      // This is the bug we're detecting - hopping animations without actual movement
+      console.log('🐛 BUG DETECTED: Hopping animations are playing without corresponding actor movement!');
+      expect(hoppingAnimationsWithoutMovement).toBe(0);
+    }
+    
+    if (movementLogs.length === 0 && hoppingAnimationLogs.length === 0) {
+      console.log('❌ No movement events or hopping animations detected - actors should be active on repos server');
+      // Fail the test if no activity is detected - this indicates a problem
+      expect(movementLogs.length + hoppingAnimationLogs.length).toBeGreaterThan(0);
       return;
     }
     
-    // Validate each movement event
+    // Validate each movement event (only if we have movements)
     let validMovements = 0;
     let invalidMovements = 0;
     const invalidMovementDetails: any[] = [];
     
-    for (const movementLog of movementLogs) {
-      const { uid, username, fromX, fromY, fromZ, toX, toY, toZ, movementType } = movementLog.data;
+    if (movementLogs.length > 0) {
+      console.log('🔍 Validating movement coordinates...');
       
-      // Basic coordinate validation
-      expect(typeof toX).toBe('number');
-      expect(typeof toY).toBe('number');
-      expect(typeof toZ).toBe('number');
-      expect(Number.isFinite(toX)).toBe(true);
-      expect(Number.isFinite(toY)).toBe(true);
-      expect(Number.isFinite(toZ)).toBe(true);
-      expect(Number.isInteger(toX)).toBe(true);
-      expect(Number.isInteger(toY)).toBe(true);
+      for (const movementLog of movementLogs) {
+        const { uid, username, fromX, fromY, fromZ, toX, toY, toZ, movementType } = movementLog.data;
+        
+        // Basic coordinate validation
+        expect(typeof toX).toBe('number');
+        expect(typeof toY).toBe('number');
+        expect(typeof toZ).toBe('number');
+        expect(Number.isFinite(toX)).toBe(true);
+        expect(Number.isFinite(toY)).toBe(true);
+        expect(Number.isFinite(toZ)).toBe(true);
+        expect(Number.isInteger(toX)).toBe(true);
+        expect(Number.isInteger(toY)).toBe(true);
+        
+        // Validate from coordinates as well
+        expect(typeof fromX).toBe('number');
+        expect(typeof fromY).toBe('number');
+        expect(typeof fromZ).toBe('number');
+        expect(Number.isFinite(fromX)).toBe(true);
+        expect(Number.isFinite(fromY)).toBe(true);
+        expect(Number.isFinite(fromZ)).toBe(true);
+        expect(Number.isInteger(fromX)).toBe(true);
+        expect(Number.isInteger(fromY)).toBe(true);
+        
+        // Validate movement type
+        expect(typeof movementType).toBe('string');
+        expect(['relative', 'absolute']).toContain(movementType);
+        
+        // Check if destination coordinates are in valid spawn positions
+        const destinationPosition = `${toX}:${toY}`;
+        const isValidDestination = spawnAnalysisData.validPositions.includes(destinationPosition);
+        
+        if (isValidDestination) {
+          validMovements++;
+          console.log(`✓ Valid movement: ${username || uid} moved from (${fromX}, ${fromY}) to (${toX}, ${toY})`);
+        } else {
+          invalidMovements++;
+          const details = {
+            actor: username || uid,
+            uid,
+            from: { x: fromX, y: fromY, z: fromZ },
+            to: { x: toX, y: toY, z: toZ },
+            movementType,
+            destinationPosition,
+            timestamp: movementLog.timestamp
+          };
+          invalidMovementDetails.push(details);
+          console.log(`❌ Invalid movement: ${username || uid} moved to INVALID position (${toX}, ${toY}) - not in valid spawn list`);
+        }
+        
+        // Additional validation: shouldn't move to beacon position (0,0)
+        if (toX === 0 && toY === 0) {
+          console.log(`❌ Actor ${username || uid} moved to beacon position (0, 0) - this should not happen`);
+          expect(false).toBe(true); // Fail the test explicitly
+        }
+        
+        // Validate coordinates are within reasonable bounds (not extremely large values)
+        expect(Math.abs(toX)).toBeLessThan(1000);
+        expect(Math.abs(toY)).toBeLessThan(1000);
+        expect(Math.abs(toZ)).toBeLessThan(100);
+        expect(Math.abs(fromX)).toBeLessThan(1000);
+        expect(Math.abs(fromY)).toBeLessThan(1000);
+        expect(Math.abs(fromZ)).toBeLessThan(100);
+      }
       
-      // Validate from coordinates as well
-      expect(typeof fromX).toBe('number');
-      expect(typeof fromY).toBe('number');
-      expect(typeof fromZ).toBe('number');
-      expect(Number.isFinite(fromX)).toBe(true);
-      expect(Number.isFinite(fromY)).toBe(true);
-      expect(Number.isFinite(fromZ)).toBe(true);
-      expect(Number.isInteger(fromX)).toBe(true);
-      expect(Number.isInteger(fromY)).toBe(true);
+      console.log(`📊 Movement validation summary: ${validMovements} valid, ${invalidMovements} invalid movements`);
       
-      // Validate movement type
-      expect(typeof movementType).toBe('string');
-      expect(['relative', 'absolute']).toContain(movementType);
+      // Report invalid movements if any
+      if (invalidMovements > 0) {
+        console.log('❌ Invalid movement details:');
+        for (const detail of invalidMovementDetails) {
+          console.log(`  - ${detail.actor}: (${detail.from.x}, ${detail.from.y}) → (${detail.to.x}, ${detail.to.y}) [${detail.movementType}]`);
+        }
+        console.log(`📍 Sample valid positions: ${spawnAnalysisData.validPositions.slice(0, 10).join(', ')}`);
+        
+        // All movements should be to valid coordinates
+        expect(invalidMovements).toBe(0);
+      }
+    }
+    
+    // Final validation summary
+    if (movementLogs.length > 0) {
+      // Ensure we captured some movements for validation
+      expect(validMovements).toBeGreaterThan(0);
       
-      // Check if destination coordinates are in valid spawn positions
-      const destinationPosition = `${toX}:${toY}`;
-      const isValidDestination = spawnAnalysisData.validPositions.includes(destinationPosition);
+      // Ensure we have meaningful movement activity (at least some percentage of actors moved)
+      if (actorSpawnLogs.length >= 10 && validMovements < Math.floor(actorSpawnLogs.length * 0.1)) {
+        console.log(`❌ Too few movements detected: ${validMovements} movements for ${actorSpawnLogs.length} actors (expected at least 10% activity)`);
+        expect(validMovements).toBeGreaterThanOrEqual(Math.floor(actorSpawnLogs.length * 0.1));
+      }
       
-      if (isValidDestination) {
-        validMovements++;
-        console.log(`✓ Valid movement: ${username || uid} moved from (${fromX}, ${fromY}) to (${toX}, ${toY})`);
+      console.log(`✅ All ${validMovements} movement(s) were to valid coordinates during 15-second monitoring`);
+    }
+    
+    // Key validation: If we have hopping animations, they should correspond to movements
+    if (hoppingAnimationLogs.length > 0) {
+      console.log(`📊 Animation-Movement Consistency Check:`);
+      console.log(`  Total hopping animations: ${hoppingAnimationLogs.length}`);
+      console.log(`  Hopping animations with movement: ${hoppingAnimationsWithMovement}`);
+      console.log(`  Hopping animations WITHOUT movement: ${hoppingAnimationsWithoutMovement}`);
+      
+      // This is the critical test - hopping animations should always result in movement
+      if (hoppingAnimationsWithoutMovement > 0) {
+        console.log(`🐛 CRITICAL BUG: ${hoppingAnimationsWithoutMovement} hopping animation(s) did not result in actual movement!`);
       } else {
-        invalidMovements++;
-        const details = {
-          actor: username || uid,
-          uid,
-          from: { x: fromX, y: fromY, z: fromZ },
-          to: { x: toX, y: toY, z: toZ },
-          movementType,
-          destinationPosition,
-          timestamp: movementLog.timestamp
-        };
-        invalidMovementDetails.push(details);
-        console.log(`❌ Invalid movement: ${username || uid} moved to INVALID position (${toX}, ${toY}) - not in valid spawn list`);
+        console.log(`✅ All hopping animations correctly resulted in actor movement`);
+      }
+    } else {
+      console.log('ℹ No hopping animations detected during monitoring period');
+    }
+  });
+
+  test('@critical should detect hopping animation without movement bug', async ({ page }) => {
+    // Wait for game initialization and world generation
+    await gameUtils.waitForGameEvent('game', 'initialized', 15000);
+    await gameUtils.waitForGameEvent('world', 'generated', 15000);
+    
+    console.log('🔗 Connecting to repos server for hopping animation bug detection...');
+    
+    // Clear logs and switch to repos server
+    gameUtils.clearLogs();
+    
+    await page.evaluate(() => {
+      const joinServer = (window as any).joinServer;
+      if (joinServer) {
+        joinServer({ id: 'repos' });
+      } else {
+        throw new Error('joinServer function not available');
+      }
+    });
+    
+    // Wait for server switch and new world generation
+    await page.waitForTimeout(5000);
+    await gameUtils.waitForGameEvent('world', 'generated', 15000);
+    
+    // Verify we're on the repos server
+    const serverInfo = await page.evaluate(() => {
+      const game = (window as any).game;
+      return { currentServer: game.server };
+    });
+    expect(serverInfo.currentServer).toBe('repos');
+    
+    // Wait for actors to spawn
+    const actorSpawnLogs = gameUtils.getLogsByCategory('actor')
+      .filter(log => log.event === 'spawned');
+    
+    console.log(`📊 Monitoring ${actorSpawnLogs.length} actors for hopping animation bug`);
+    expect(actorSpawnLogs.length).toBeGreaterThanOrEqual(10);
+    
+    // Clear logs and monitor specifically for hopping animations and movements
+    console.log('🔍 Starting targeted 20-second monitoring for hopping animation bug...');
+    gameUtils.clearLogs();
+    
+    await page.waitForTimeout(20000); // Monitor for 20 seconds to catch more activity
+    
+    // Collect hopping animations and movements
+    const allLogs = gameUtils.getAllLogs();
+    const hoppingAnimations = allLogs.filter(log => 
+      log.category === 'actor' && 
+      log.event === 'animationStarted' && 
+      log.data.animationType === 'hopping'
+    );
+    
+    const movements = allLogs.filter(log => 
+      log.category === 'actor' && 
+      log.event === 'moved'
+    );
+    
+    console.log(`📊 Bug detection results:`);
+    console.log(`  Hopping animations detected: ${hoppingAnimations.length}`);
+    console.log(`  Movement events detected: ${movements.length}`);
+    
+    if (hoppingAnimations.length === 0) {
+      console.log('ℹ No hopping animations detected during monitoring - cannot test for bug');
+      return;
+    }
+    
+    // Create a detailed mapping of animations to movements
+    const animationMovementPairs: Array<{
+      animation: any;
+      matchingMovement: any | null;
+      timeDifference: number | null;
+    }> = [];
+    
+    for (const animation of hoppingAnimations) {
+      const { uid, username } = animation.data;
+      const animationTime = animation.timestamp;
+      
+      // Find the closest movement by this actor within a reasonable time window
+      const actorMovements = movements.filter(m => m.data.uid === uid);
+      let closestMovement = null;
+      let smallestTimeDiff = Infinity;
+      
+      for (const movement of actorMovements) {
+        const timeDiff = Math.abs(movement.timestamp - animationTime);
+        if (timeDiff < smallestTimeDiff && timeDiff <= 3000) { // 3 second window
+          smallestTimeDiff = timeDiff;
+          closestMovement = movement;
+        }
       }
       
-      // Additional validation: shouldn't move to beacon position (0,0)
-      if (toX === 0 && toY === 0) {
-        console.log(`❌ Actor ${username || uid} moved to beacon position (0, 0) - this should not happen`);
-        expect(false).toBe(true); // Fail the test explicitly
+      animationMovementPairs.push({
+        animation,
+        matchingMovement: closestMovement,
+        timeDifference: closestMovement ? smallestTimeDiff : null
+      });
+      
+      if (closestMovement) {
+        const { fromX, fromY, toX, toY } = closestMovement.data;
+        console.log(`✓ Hopping animation for ${username || uid} matched with movement: (${fromX}, ${fromY}) → (${toX}, ${toY}) [${smallestTimeDiff}ms apart]`);
+      } else {
+        console.log(`❌ Hopping animation for ${username || uid} has NO matching movement within 3 seconds`);
+      }
+    }
+    
+    // Count animations without movements
+    const animationsWithoutMovement = animationMovementPairs.filter(pair => pair.matchingMovement === null);
+    const animationsWithMovement = animationMovementPairs.filter(pair => pair.matchingMovement !== null);
+    
+    console.log(`📊 Final bug detection summary:`);
+    console.log(`  Hopping animations WITH corresponding movement: ${animationsWithMovement.length}`);
+    console.log(`  Hopping animations WITHOUT corresponding movement: ${animationsWithoutMovement.length}`);
+    
+    // Report the bug if found
+    if (animationsWithoutMovement.length > 0) {
+      console.log(`🐛 BUG CONFIRMED: ${animationsWithoutMovement.length} hopping animation(s) played without actual actor movement!`);
+      console.log('   This indicates the animation system is decoupled from the movement system.');
+      
+      for (const problematicPair of animationsWithoutMovement) {
+        const { username, uid } = problematicPair.animation.data;
+        console.log(`   - ${username || uid} hopped at ${new Date(problematicPair.animation.timestamp).toISOString()} but never moved`);
       }
       
-      // Validate coordinates are within reasonable bounds (not extremely large values)
-      expect(Math.abs(toX)).toBeLessThan(1000);
-      expect(Math.abs(toY)).toBeLessThan(1000);
-      expect(Math.abs(toZ)).toBeLessThan(100);
-      expect(Math.abs(fromX)).toBeLessThan(1000);
-      expect(Math.abs(fromY)).toBeLessThan(1000);
-      expect(Math.abs(fromZ)).toBeLessThan(100);
+      // Fail the test - this is the bug we're trying to detect
+      expect(animationsWithoutMovement.length).toBe(0);
+    } else {
+      console.log(`✅ No hopping animation bug detected - all ${animationsWithMovement.length} hopping animations had corresponding movements`);
     }
-    
-    console.log(`📊 Movement validation summary: ${validMovements} valid, ${invalidMovements} invalid movements`);
-    
-    // Report invalid movements if any
-    if (invalidMovements > 0) {
-      console.log('❌ Invalid movement details:');
-      for (const detail of invalidMovementDetails) {
-        console.log(`  - ${detail.actor}: (${detail.from.x}, ${detail.from.y}) → (${detail.to.x}, ${detail.to.y}) [${detail.movementType}]`);
-      }
-      console.log(`📍 Sample valid positions: ${spawnAnalysisData.validPositions.slice(0, 10).join(', ')}`);
-    }
-    
-    // All movements should be to valid coordinates
-    expect(invalidMovements).toBe(0);
-    
-    // Ensure we captured some movements for validation
-    expect(validMovements).toBeGreaterThan(0);
-    
-    // Ensure we have meaningful movement activity (at least some percentage of actors moved)
-    if (actorSpawnLogs.length >= 10 && validMovements < Math.floor(actorSpawnLogs.length * 0.1)) {
-      console.log(`❌ Too few movements detected: ${validMovements} movements for ${actorSpawnLogs.length} actors (expected at least 10% activity)`);
-      expect(validMovements).toBeGreaterThanOrEqual(Math.floor(actorSpawnLogs.length * 0.1));
-    }
-    
-    console.log(`✅ All ${validMovements} movement(s) were to valid coordinates during 15-second monitoring`);
   });
 
   test('@critical should validate movement animation states', async ({ page }) => {
