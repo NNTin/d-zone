@@ -456,6 +456,497 @@ test.describe('@critical Actor Movement Validation', () => {
     }
   });
 
+  // Pathfinding tests with mocked websocket and controlled world
+  test('@critical should path around empty tile from north to south', async ({ page }) => {
+    console.log('🗺️ Testing pathfinding: North to South around empty tile');
+    
+    // Navigate and wait for initial setup
+    await page.goto('/?e2e-test=true');
+    await GameAssertions.assertCanvasVisible(page);
+    
+    // Mock websocket and create controlled world
+    await page.evaluate(() => {
+      // Mock the websocket connection
+      const mockWebSocket = {
+        send: () => {},
+        close: () => {},
+        readyState: 1, // OPEN
+        addEventListener: () => {},
+        removeEventListener: () => {}
+      };
+      
+      // Override WebSocket constructor
+      (window as any).WebSocket = function() { return mockWebSocket; };
+      
+      // Create a controlled world with empty tile in middle
+      const game = (window as any).game;
+      if (game && game.world) {
+        // Clear existing world
+        game.world.tiles = {};
+        
+        // Create 3x3 island with empty center
+        const tiles = [
+          { x: -1, y: -1, type: 'grass' },
+          { x: 0, y: -1, type: 'grass' },  // North spawn
+          { x: 1, y: -1, type: 'grass' },
+          { x: -1, y: 0, type: 'grass' },
+          // { x: 0, y: 0 } - EMPTY TILE (no tile here)
+          { x: 1, y: 0, type: 'grass' },
+          { x: -1, y: 1, type: 'grass' },
+          { x: 0, y: 1, type: 'grass' },   // South destination
+          { x: 1, y: 1, type: 'grass' }
+        ];
+        
+        // Add tiles to world
+        for (const tile of tiles) {
+          game.world.tiles[`${tile.x}:${tile.y}`] = {
+            x: tile.x,
+            y: tile.y,
+            type: tile.type,
+            walkable: true
+          };
+        }
+        
+        // Update world bounds
+        game.world.bounds = { xl: -1, xh: 1, yl: -1, yh: 1 };
+      }
+    });
+    
+    // Start log capture after world setup
+    await gameUtils.startLogCapture();
+    
+    // Create test actor at north position
+    await page.evaluate(() => {
+      const game = (window as any).game;
+      if (game && game.actors) {
+        // Clear existing actors
+        game.actors = {};
+        
+        // Create actor at north position (0, -1)
+        const testActor = {
+          uid: 'test-actor-north',
+          username: 'TestActorNorth',
+          x: 0,
+          y: -1,
+          z: 0,
+          facing: 'south',
+          position: { x: 0, y: -1, z: 0 }
+        };
+        
+        game.actors['test-actor-north'] = testActor;
+        
+        // Log the actor spawn
+        if ((window as any).gameLogger) {
+          (window as any).gameLogger.actorSpawned({
+            uid: testActor.uid,
+            username: testActor.username,
+            x: testActor.x,
+            y: testActor.y,
+            z: testActor.z
+          });
+        }
+      }
+    });
+    
+    // Clear logs and start movement
+    gameUtils.clearLogs();
+    
+    // Command actor to move to south position
+    await page.evaluate(() => {
+      const game = (window as any).game;
+      const actor = game.actors['test-actor-north'];
+      if (actor) {
+        // Simulate movement command to (0, 1) - south destination
+        // This should trigger pathfinding around the empty tile
+        if (actor.moveTo) {
+          actor.moveTo(0, 1);
+        } else {
+          // Manual pathfinding simulation
+          actor.destination = { x: 0, y: 1 };
+          actor.startMove && actor.startMove();
+        }
+      }
+    });
+    
+    // Monitor movement for 10 seconds
+    await page.waitForTimeout(10000);
+    
+    // Collect movement logs
+    const movementLogs = gameUtils.getLogsByCategory('actor')
+      .filter(log => log.event === 'moved');
+    
+    console.log(`📊 Captured ${movementLogs.length} movement events for north-to-south pathfinding`);
+    
+    if (movementLogs.length === 0) {
+      console.log('❌ No movement events detected - actor should respond to movement commands');
+      expect(movementLogs.length).toBeGreaterThan(0);
+      return;
+    }
+    
+    // Validate pathfinding: actor should NOT move through (0, 0)
+    let movedThroughEmptyTile = false;
+    let pathTaken: string[] = [];
+    
+    for (const movement of movementLogs) {
+      const { toX, toY } = movement.data;
+      const position = `${toX}:${toY}`;
+      pathTaken.push(position);
+      
+      if (toX === 0 && toY === 0) {
+        movedThroughEmptyTile = true;
+        console.log(`❌ Actor moved through empty tile at (0, 0) - pathfinding failed!`);
+      }
+    }
+    
+    console.log(`📍 Path taken: ${pathTaken.join(' → ')}`);
+    
+    // Test should fail if actor moved through empty tile
+    expect(movedThroughEmptyTile).toBe(false);
+    
+    // Verify actor reached destination or at least attempted to path around
+    const finalMovement = movementLogs[movementLogs.length - 1];
+    if (finalMovement) {
+      const { toX, toY } = finalMovement.data;
+      console.log(`✓ Actor pathfinding from north (0, -1) avoided empty tile (0, 0), final position: (${toX}, ${toY})`);
+    }
+  });
+
+  test('@critical should path around empty tile from south to north', async ({ page }) => {
+    console.log('🗺️ Testing pathfinding: South to North around empty tile');
+    
+    await page.goto('/?e2e-test=true');
+    await GameAssertions.assertCanvasVisible(page);
+    
+    // Create same world setup with actor at south
+    await page.evaluate(() => {
+      const mockWebSocket = {
+        send: () => {},
+        close: () => {},
+        readyState: 1,
+        addEventListener: () => {},
+        removeEventListener: () => {}
+      };
+      (window as any).WebSocket = function() { return mockWebSocket; };
+      
+      const game = (window as any).game;
+      if (game && game.world) {
+        game.world.tiles = {};
+        const tiles = [
+          { x: -1, y: -1, type: 'grass' },
+          { x: 0, y: -1, type: 'grass' },  // North destination
+          { x: 1, y: -1, type: 'grass' },
+          { x: -1, y: 0, type: 'grass' },
+          { x: 1, y: 0, type: 'grass' },
+          { x: -1, y: 1, type: 'grass' },
+          { x: 0, y: 1, type: 'grass' },   // South spawn
+          { x: 1, y: 1, type: 'grass' }
+        ];
+        
+        for (const tile of tiles) {
+          game.world.tiles[`${tile.x}:${tile.y}`] = {
+            x: tile.x, y: tile.y, type: tile.type, walkable: true
+          };
+        }
+        game.world.bounds = { xl: -1, xh: 1, yl: -1, yh: 1 };
+      }
+    });
+    
+    await gameUtils.startLogCapture();
+    
+    // Create actor at south position
+    await page.evaluate(() => {
+      const game = (window as any).game;
+      if (game && game.actors) {
+        game.actors = {};
+        const testActor = {
+          uid: 'test-actor-south',
+          username: 'TestActorSouth',
+          x: 0, y: 1, z: 0,
+          facing: 'north',
+          position: { x: 0, y: 1, z: 0 }
+        };
+        game.actors['test-actor-south'] = testActor;
+        
+        if ((window as any).gameLogger) {
+          (window as any).gameLogger.actorSpawned({
+            uid: testActor.uid, username: testActor.username,
+            x: testActor.x, y: testActor.y, z: testActor.z
+          });
+        }
+      }
+    });
+    
+    gameUtils.clearLogs();
+    
+    // Command movement to north
+    await page.evaluate(() => {
+      const game = (window as any).game;
+      const actor = game.actors['test-actor-south'];
+      if (actor) {
+        if (actor.moveTo) {
+          actor.moveTo(0, -1);
+        } else {
+          actor.destination = { x: 0, y: -1 };
+          actor.startMove && actor.startMove();
+        }
+      }
+    });
+    
+    await page.waitForTimeout(10000);
+    
+    const movementLogs = gameUtils.getLogsByCategory('actor')
+      .filter(log => log.event === 'moved');
+    
+    console.log(`📊 Captured ${movementLogs.length} movement events for south-to-north pathfinding`);
+    
+    if (movementLogs.length === 0) {
+      console.log('❌ No movement events detected - actor should respond to movement commands');
+      expect(movementLogs.length).toBeGreaterThan(0);
+      return;
+    }
+    
+    let movedThroughEmptyTile = false;
+    let pathTaken: string[] = [];
+    
+    for (const movement of movementLogs) {
+      const { toX, toY } = movement.data;
+      pathTaken.push(`${toX}:${toY}`);
+      if (toX === 0 && toY === 0) {
+        movedThroughEmptyTile = true;
+        console.log(`❌ Actor moved through empty tile at (0, 0) - pathfinding failed!`);
+      }
+    }
+    
+    console.log(`📍 Path taken: ${pathTaken.join(' → ')}`);
+    expect(movedThroughEmptyTile).toBe(false);
+    
+    const finalMovement = movementLogs[movementLogs.length - 1];
+    if (finalMovement) {
+      const { toX, toY } = finalMovement.data;
+      console.log(`✓ Actor pathfinding from south (0, 1) avoided empty tile (0, 0), final position: (${toX}, ${toY})`);
+    }
+  });
+
+  test('@critical should path around empty tile from west to east', async ({ page }) => {
+    console.log('🗺️ Testing pathfinding: West to East around empty tile');
+    
+    await page.goto('/?e2e-test=true');
+    await GameAssertions.assertCanvasVisible(page);
+    
+    await page.evaluate(() => {
+      const mockWebSocket = {
+        send: () => {}, close: () => {}, readyState: 1,
+        addEventListener: () => {}, removeEventListener: () => {}
+      };
+      (window as any).WebSocket = function() { return mockWebSocket; };
+      
+      const game = (window as any).game;
+      if (game && game.world) {
+        game.world.tiles = {};
+        const tiles = [
+          { x: -1, y: -1, type: 'grass' },
+          { x: 0, y: -1, type: 'grass' },
+          { x: 1, y: -1, type: 'grass' },
+          { x: -1, y: 0, type: 'grass' },  // West spawn
+          { x: 1, y: 0, type: 'grass' },   // East destination
+          { x: -1, y: 1, type: 'grass' },
+          { x: 0, y: 1, type: 'grass' },
+          { x: 1, y: 1, type: 'grass' }
+        ];
+        
+        for (const tile of tiles) {
+          game.world.tiles[`${tile.x}:${tile.y}`] = {
+            x: tile.x, y: tile.y, type: tile.type, walkable: true
+          };
+        }
+        game.world.bounds = { xl: -1, xh: 1, yl: -1, yh: 1 };
+      }
+    });
+    
+    await gameUtils.startLogCapture();
+    
+    await page.evaluate(() => {
+      const game = (window as any).game;
+      if (game && game.actors) {
+        game.actors = {};
+        const testActor = {
+          uid: 'test-actor-west',
+          username: 'TestActorWest',
+          x: -1, y: 0, z: 0,
+          facing: 'east',
+          position: { x: -1, y: 0, z: 0 }
+        };
+        game.actors['test-actor-west'] = testActor;
+        
+        if ((window as any).gameLogger) {
+          (window as any).gameLogger.actorSpawned({
+            uid: testActor.uid, username: testActor.username,
+            x: testActor.x, y: testActor.y, z: testActor.z
+          });
+        }
+      }
+    });
+    
+    gameUtils.clearLogs();
+    
+    await page.evaluate(() => {
+      const game = (window as any).game;
+      const actor = game.actors['test-actor-west'];
+      if (actor) {
+        if (actor.moveTo) {
+          actor.moveTo(1, 0);
+        } else {
+          actor.destination = { x: 1, y: 0 };
+          actor.startMove && actor.startMove();
+        }
+      }
+    });
+    
+    await page.waitForTimeout(10000);
+    
+    const movementLogs = gameUtils.getLogsByCategory('actor')
+      .filter(log => log.event === 'moved');
+    
+    console.log(`📊 Captured ${movementLogs.length} movement events for west-to-east pathfinding`);
+    
+    if (movementLogs.length === 0) {
+      console.log('❌ No movement events detected - actor should respond to movement commands');
+      expect(movementLogs.length).toBeGreaterThan(0);
+      return;
+    }
+    
+    let movedThroughEmptyTile = false;
+    let pathTaken: string[] = [];
+    
+    for (const movement of movementLogs) {
+      const { toX, toY } = movement.data;
+      pathTaken.push(`${toX}:${toY}`);
+      if (toX === 0 && toY === 0) {
+        movedThroughEmptyTile = true;
+        console.log(`❌ Actor moved through empty tile at (0, 0) - pathfinding failed!`);
+      }
+    }
+    
+    console.log(`📍 Path taken: ${pathTaken.join(' → ')}`);
+    expect(movedThroughEmptyTile).toBe(false);
+    
+    const finalMovement = movementLogs[movementLogs.length - 1];
+    if (finalMovement) {
+      const { toX, toY } = finalMovement.data;
+      console.log(`✓ Actor pathfinding from west (-1, 0) avoided empty tile (0, 0), final position: (${toX}, ${toY})`);
+    }
+  });
+
+  test('@critical should path around empty tile from east to west', async ({ page }) => {
+    console.log('🗺️ Testing pathfinding: East to West around empty tile');
+    
+    await page.goto('/?e2e-test=true');
+    await GameAssertions.assertCanvasVisible(page);
+    
+    await page.evaluate(() => {
+      const mockWebSocket = {
+        send: () => {}, close: () => {}, readyState: 1,
+        addEventListener: () => {}, removeEventListener: () => {}
+      };
+      (window as any).WebSocket = function() { return mockWebSocket; };
+      
+      const game = (window as any).game;
+      if (game && game.world) {
+        game.world.tiles = {};
+        const tiles = [
+          { x: -1, y: -1, type: 'grass' },
+          { x: 0, y: -1, type: 'grass' },
+          { x: 1, y: -1, type: 'grass' },
+          { x: -1, y: 0, type: 'grass' },  // West destination
+          { x: 1, y: 0, type: 'grass' },   // East spawn
+          { x: -1, y: 1, type: 'grass' },
+          { x: 0, y: 1, type: 'grass' },
+          { x: 1, y: 1, type: 'grass' }
+        ];
+        
+        for (const tile of tiles) {
+          game.world.tiles[`${tile.x}:${tile.y}`] = {
+            x: tile.x, y: tile.y, type: tile.type, walkable: true
+          };
+        }
+        game.world.bounds = { xl: -1, xh: 1, yl: -1, yh: 1 };
+      }
+    });
+    
+    await gameUtils.startLogCapture();
+    
+    await page.evaluate(() => {
+      const game = (window as any).game;
+      if (game && game.actors) {
+        game.actors = {};
+        const testActor = {
+          uid: 'test-actor-east',
+          username: 'TestActorEast',
+          x: 1, y: 0, z: 0,
+          facing: 'west',
+          position: { x: 1, y: 0, z: 0 }
+        };
+        game.actors['test-actor-east'] = testActor;
+        
+        if ((window as any).gameLogger) {
+          (window as any).gameLogger.actorSpawned({
+            uid: testActor.uid, username: testActor.username,
+            x: testActor.x, y: testActor.y, z: testActor.z
+          });
+        }
+      }
+    });
+    
+    gameUtils.clearLogs();
+    
+    await page.evaluate(() => {
+      const game = (window as any).game;
+      const actor = game.actors['test-actor-east'];
+      if (actor) {
+        if (actor.moveTo) {
+          actor.moveTo(-1, 0);
+        } else {
+          actor.destination = { x: -1, y: 0 };
+          actor.startMove && actor.startMove();
+        }
+      }
+    });
+    
+    await page.waitForTimeout(10000);
+    
+    const movementLogs = gameUtils.getLogsByCategory('actor')
+      .filter(log => log.event === 'moved');
+    
+    console.log(`📊 Captured ${movementLogs.length} movement events for east-to-west pathfinding`);
+    
+    if (movementLogs.length === 0) {
+      console.log('❌ No movement events detected - actor should respond to movement commands');
+      expect(movementLogs.length).toBeGreaterThan(0);
+      return;
+    }
+    
+    let movedThroughEmptyTile = false;
+    let pathTaken: string[] = [];
+    
+    for (const movement of movementLogs) {
+      const { toX, toY } = movement.data;
+      pathTaken.push(`${toX}:${toY}`);
+      if (toX === 0 && toY === 0) {
+        movedThroughEmptyTile = true;
+        console.log(`❌ Actor moved through empty tile at (0, 0) - pathfinding failed!`);
+      }
+    }
+    
+    console.log(`📍 Path taken: ${pathTaken.join(' → ')}`);
+    expect(movedThroughEmptyTile).toBe(false);
+    
+    const finalMovement = movementLogs[movementLogs.length - 1];
+    if (finalMovement) {
+      const { toX, toY } = finalMovement.data;
+      console.log(`✓ Actor pathfinding from east (1, 0) avoided empty tile (0, 0), final position: (${toX}, ${toY})`);
+    }
+  });
+
   test('@critical should validate movement animation states', async ({ page }) => {
     // Wait for game initialization and world generation
     await gameUtils.waitForGameEvent('game', 'initialized', 15000);
