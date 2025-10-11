@@ -179,11 +179,15 @@ class GameLogger {
    */
   actorMoved(data: { 
     uid: string; 
-    username?: string;
-    x: number; 
-    y: number; 
+    username: string;
+    fromX: number;
+    fromY: number;
+    fromZ: number;
+    toX: number; 
+    toY: number; 
+    toZ: number;
+    movementType: 'relative' | 'absolute';
     facing?: string;
-    isMoving?: boolean;
   }): void {
     if (!this.enabled) return;
     this.baseLogger.debug({
@@ -191,7 +195,7 @@ class GameLogger {
       event: 'moved',
       timestamp: Date.now(),
       ...data
-    }, `Actor moved: ${data.username || data.uid} to (${data.x}, ${data.y})`);
+    }, `Actor moved: ${data.username} from (${data.fromX}, ${data.fromY}, ${data.fromZ}) to (${data.toX}, ${data.toY}, ${data.toZ})`);
   }
 
   /**
@@ -224,6 +228,79 @@ class GameLogger {
       timestamp: Date.now(),
       ...data
     }, `Actor updated: ${data.username || data.uid}`);
+  }
+
+  /**
+   * Actor animation started
+   */
+  actorAnimationStarted(data: {
+    uid: string;
+    username: string;
+    animationType: 'hopping' | 'talking' | 'idle' | 'wander';
+    state: string;
+    facing: string;
+    frame: number;
+    destination?: { x: number; y: number; z: number };
+  }): void {
+    if (!this.enabled) return;
+    this.baseLogger.debug({
+      category: 'actor',
+      event: 'animationStarted',
+      timestamp: Date.now(),
+      ...data
+    }, `Actor animation started: ${data.username} - ${data.animationType} (${data.state})`);
+  }
+
+  /**
+   * Actor animation finished
+   */
+  actorAnimationFinished(data: {
+    uid: string;
+    username: string;
+    animationType: 'hopping' | 'talking' | 'idle' | 'wander';
+    state: string;
+    facing: string;
+    finalFrame: number;
+    position: { x: number; y: number; z: number };
+  }): void {
+    if (!this.enabled) return;
+    this.baseLogger.debug({
+      category: 'actor',
+      event: 'animationFinished',
+      timestamp: Date.now(),
+      ...data
+    }, `Actor animation finished: ${data.username} - ${data.animationType} at (${data.position.x}, ${data.position.y})`);
+  }
+
+  /**
+   * Actor sprite rendered to canvas
+   */
+  actorSpriteRendered(data: {
+    uid: string;
+    username: string;
+    state: string;
+    facing: string;
+    frame: number;
+    spriteMetrics: {
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      ox: number;
+      oy: number;
+    };
+    image: string | string[];
+    presence: string;
+    talking: boolean;
+    moving: boolean;
+  }): void {
+    if (!this.enabled) return;
+    this.baseLogger.debug({
+      category: 'actor',
+      event: 'spriteRendered',
+      timestamp: Date.now(),
+      ...data
+    }, `Actor sprite rendered: ${data.username} - ${data.state}/${data.facing} (${data.presence})`);
   }
 
   // ===========================================
