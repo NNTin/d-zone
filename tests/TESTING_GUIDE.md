@@ -83,8 +83,8 @@ tests/
 │       └── environment.properties  # Test environment metadata
 │
 ├── setup.ts                    # Global test setup configuration
-├── TESTING_GUIDE.md           # This comprehensive guide
-├── CANVAS_TESTING_GUIDE.md    # Canvas testing methodology
+├── TESTING_GUIDE.md            # This comprehensive guide
+├── CANVAS_TESTING_GUIDE.md     # Canvas testing methodology
 └── README.md                   # Quick reference documentation
 ```
 

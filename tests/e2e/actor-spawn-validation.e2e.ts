@@ -158,13 +158,6 @@ test.describe('@critical Actor Spawn Validation', () => {
     const validSpawnPositions = spawnAnalysisData?.validPositions || [];
     const invalidSpawnPositions = spawnAnalysisData?.invalidPositions || [];
     
-    if (validSpawnPositions.length > 0) {
-      console.log(`📊 World has ${validSpawnPositions.length} valid spawn positions, ${invalidSpawnPositions.length} invalid positions`);
-    }
-    
-    // Check logs from initialization
-    console.log('🔍 Checking logs from initialization...');
-    
     // Get actor spawn logs using utility
     const spawnLogs = getActorSpawnLogs(gameUtils);
     console.log(`📊 Actor logs found: ${spawnLogs.length}`);
@@ -178,6 +171,11 @@ test.describe('@critical Actor Spawn Validation', () => {
       console.log('✓ World bounds are valid integers for coordinate system');
       return;
     }
+    
+    // If actors spawned, spawn analysis data must be available
+    console.log('🔍 Checking logs from initialization...');
+    expect(validSpawnPositions.length).toBeGreaterThan(0);
+    console.log(`📊 World has ${validSpawnPositions.length} valid spawn positions, ${invalidSpawnPositions.length} invalid positions`);
     
     // If actors did spawn, validate their coordinates using utilities
     console.log(`Found ${spawnLogs.length} actor spawn(s) to validate`);
@@ -200,22 +198,18 @@ test.describe('@critical Actor Spawn Validation', () => {
       validateNotAtBeaconPosition(coords);
       
       // Check if actor spawned in a position that was marked as valid
-      if (validSpawnPositions.length > 0) {
-        const actorPosition = `${coords.x}:${coords.y}`;
-        const isValidPosition = validSpawnPositions.includes(actorPosition);
+      const actorPosition = `${coords.x}:${coords.y}`;
+      const isValidPosition = validSpawnPositions.includes(actorPosition);
+      
+      if (!isValidPosition) {
+        console.log(`❌ Actor ${coords.username} spawned at INVALID position (${coords.x}, ${coords.y}, ${coords.z}) - not in valid spawn list`);
+        console.log(`📍 Valid positions sample: ${validSpawnPositions.slice(0, 10).join(', ')}`);
+        console.log(`🚫 Invalid positions: ${invalidSpawnPositions.join(', ')}`);
         
-        if (!isValidPosition) {
-          console.log(`❌ Actor ${coords.username} spawned at INVALID position (${coords.x}, ${coords.y}, ${coords.z}) - not in valid spawn list`);
-          console.log(`📍 Valid positions sample: ${validSpawnPositions.slice(0, 10).join(', ')}`);
-          console.log(`🚫 Invalid positions: ${invalidSpawnPositions.join(', ')}`);
-          
-          // The test should fail when actors spawn at invalid positions
-          expect(isValidPosition).toBe(true);
-        } else {
-          console.log(`✓ Actor ${coords.username} spawned at VALID position (${coords.x}, ${coords.y}, ${coords.z})`);
-        }
+        // The test should fail when actors spawn at invalid positions
+        expect(isValidPosition).toBe(true);
       } else {
-        console.log(`⚠️  No spawn position analysis data available for ${coords.username} at (${coords.x}, ${coords.y}, ${coords.z})`);
+        console.log(`✓ Actor ${coords.username} spawned at VALID position (${coords.x}, ${coords.y}, ${coords.z})`);
       }
       
       console.log(`✓ Actor ${coords.username} (${coords.uid}) has valid coordinates: (${coords.x}, ${coords.y}, ${coords.z})`);

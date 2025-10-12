@@ -222,14 +222,22 @@ export function validateCoordinatesNotExtreme(
 
 /**
  * Validate actor spawned in a valid position according to spawn analysis
+ * Throws an error if spawn analysis data is not available
  * Returns true if valid, false if invalid
  */
 export function validateActorSpawnedInValidPosition(
   coords: ActorCoordinates,
-  validSpawnPositions: string[]
+  validSpawnPositions: string[],
+  requireSpawnAnalysis: boolean = true
 ): boolean {
   if (validSpawnPositions.length === 0) {
-    console.log(`⚠️  No spawn position analysis data available for ${coords.username} at (${coords.x}, ${coords.y}, ${coords.z})`);
+    const errorMsg = `No spawn position analysis data available for ${coords.username} at (${coords.x}, ${coords.y}, ${coords.z})`;
+    console.log(`❌ ${errorMsg}`);
+    
+    if (requireSpawnAnalysis) {
+      throw new Error(errorMsg);
+    }
+    
     return true; // Can't validate without data
   }
   
@@ -249,11 +257,13 @@ export function validateActorSpawnedInValidPosition(
 /**
  * Comprehensive validation of actor spawn coordinates
  * Performs all basic validations and returns detailed results
+ * @param requireSpawnAnalysis - If true, validation will fail if spawn analysis data is missing
  */
 export function validateActorSpawnCoordinates(
   coords: ActorCoordinates,
   mapBounds: MapBounds,
-  validSpawnPositions: string[] = []
+  validSpawnPositions: string[] = [],
+  requireSpawnAnalysis: boolean = true
 ): {
   valid: boolean;
   errors: string[];
@@ -296,10 +306,17 @@ export function validateActorSpawnCoordinates(
     errors.push('Actor spawned at beacon position (0,0)');
   }
   
-  if (validSpawnPositions.length > 0) {
-    const isValid = validateActorSpawnedInValidPosition(coords, validSpawnPositions);
-    if (!isValid) {
-      errors.push('Actor spawned at position not in valid spawn list');
+  // Check spawn position validation
+  if (requireSpawnAnalysis && validSpawnPositions.length === 0) {
+    errors.push('No spawn position analysis data available');
+  } else if (validSpawnPositions.length > 0) {
+    try {
+      const isValid = validateActorSpawnedInValidPosition(coords, validSpawnPositions, requireSpawnAnalysis);
+      if (!isValid) {
+        errors.push('Actor spawned at position not in valid spawn list');
+      }
+    } catch (e) {
+      errors.push('Spawn position validation failed: ' + (e instanceof Error ? e.message : String(e)));
     }
   }
   
@@ -350,11 +367,13 @@ export function findCoordinateErrors(gameUtils: CanvasGameTestUtils): GameLogEve
 /**
  * Validate all spawned actors in the current logs
  * Returns summary of validation results
+ * @param requireSpawnAnalysis - If true, validation will fail if spawn analysis data is missing
  */
 export function validateAllSpawnedActors(
   gameUtils: CanvasGameTestUtils,
   mapBounds: MapBounds,
-  validSpawnPositions: string[] = []
+  validSpawnPositions: string[] = [],
+  requireSpawnAnalysis: boolean = true
 ): {
   totalActors: number;
   validActors: number;
@@ -376,7 +395,7 @@ export function validateAllSpawnedActors(
       z: log.data.z
     };
     
-    const result = validateActorSpawnCoordinates(coords, mapBounds, validSpawnPositions);
+    const result = validateActorSpawnCoordinates(coords, mapBounds, validSpawnPositions, requireSpawnAnalysis);
     
     if (result.valid) {
       validActors++;
