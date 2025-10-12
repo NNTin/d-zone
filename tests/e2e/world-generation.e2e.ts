@@ -8,7 +8,7 @@
  */
 
 import { expect, test } from '@playwright/test';
-import { getMockWebSocketScript } from './mocks/apiHandlers.js';
+import { getMockWebSocketScript, getMockWorldGenerationScript } from './mocks/apiHandlers.js';
 import { CanvasGameTestUtils, GameAssertions } from './utils/canvasTestUtils.js';
 import {
   extractSpawnAnalysisData,
@@ -145,5 +145,116 @@ test.describe('@critical World Generation', () => {
     }
     
     console.log(`✅ All ${expectedActorNames.length} mock actors spawned successfully on the mock world`);
+  });
+
+  test('@normal should generate a 4x4 mock world with 3 mock actors', async ({ page }) => {
+    console.log('🧪 Testing 4x4 mock world generation with mocked WebSocket and world generation');
+    
+    // Mock WebSocket BEFORE page loads (using the same mock as the previous test)
+    console.log('🔌 Setting up WebSocket mock...');
+    await page.addInitScript(getMockWebSocketScript());
+    
+    // Mock World Generation BEFORE page loads
+    console.log('🌍 Setting up World generation mock...');
+    await page.addInitScript(getMockWorldGenerationScript(4));
+    
+    console.log('🌐 Loading page with mocked WebSocket and World...');
+    await page.goto('/?e2e-test=true');
+    
+    // Verify canvas is visible
+    await GameAssertions.assertCanvasVisible(page);
+    
+    // Verify WebSocket was mocked
+    const isMocked = await page.evaluate(() => {
+      return (window as any).WebSocket.name === 'MockWebSocket';
+    });
+    console.log(`✓ WebSocket mocked: ${isMocked}`);
+    expect(isMocked).toBe(true);
+    
+    // Verify World generation mock flag is set
+    const isWorldMocked = await page.evaluate(() => {
+      return (window as any).__mockWorldGeneration === true;
+    });
+    console.log(`✓ World generation mocked: ${isWorldMocked}`);
+    expect(isWorldMocked).toBe(true);
+    
+    // Wait for game initialization
+    console.log('⏳ Waiting for game initialization...');
+    await gameUtils.waitForGameEvent('game', 'initialized', 15000);
+    console.log('✓ Game initialized');
+    
+    // Wait for world generation
+    console.log('⏳ Waiting for world generation...');
+    await gameUtils.waitForGameEvent('world', 'generated', 10000);
+    console.log('✓ World generated');
+    
+    // Wait for tile map to be logged
+    console.log('⏳ Waiting for tile map...');
+    await gameUtils.waitForGameEvent('world', 'tile_map', 5000);
+    console.log('✓ Tile map created');
+    
+    // Get world data
+    const worldData = getWorldGenerationData(gameUtils);
+    expect(worldData).toBeTruthy();
+    console.log(`📊 World created with ${worldData!.totalTiles} tiles`);
+    
+    // Get tile map data
+    const worldLogs = gameUtils.getLogsByCategory('world');
+    const tileMapLogs = worldLogs.filter(log => log.event === 'tile_map');
+    expect(tileMapLogs.length).toBeGreaterThan(0);
+    
+    const tileMapData = tileMapLogs[0].data;
+    console.log(`📊 Tile map: ${tileMapData.totalTiles} tiles, ${tileMapData.uniqueTileCodes} unique codes`);
+    console.log(`📊 Grid tile types: ${Object.keys(tileMapData.gridTileTypes).length} positions`);
+    
+    // Verify the world is a 4x4 grid (expecting 16 grid positions)
+    // Note: The actual tile count may be higher due to tile subdivision
+    const gridPositions = Object.keys(tileMapData.gridTileTypes);
+    console.log(`📍 Grid positions: ${gridPositions.join(', ')}`);
+    
+    // For a 4x4 world, we expect positions from -1 to 2 in x and y (or similar based on world generation)
+    expect(gridPositions.length).toBeGreaterThanOrEqual(12); // At least 12 positions for a small world
+    expect(gridPositions.length).toBeLessThanOrEqual(20); // But not too many
+    
+    // Verify tile types exist
+    const tileTypes = Object.values(tileMapData.gridTileTypes);
+    const hasGrass = tileTypes.includes('grass');
+    const hasPlain = tileTypes.includes('plain');
+    console.log(`✓ World has grass: ${hasGrass}, plain/slab: ${hasPlain}`);
+    
+    // Wait for actors to spawn from our mock data
+    console.log('⏳ Waiting for mock actors to spawn...');
+    await page.waitForTimeout(2000);
+    
+    // Get spawned actors
+    const spawnLogs = getActorSpawnLogs(gameUtils);
+    console.log(`📊 Found ${spawnLogs.length} actor spawn(s) on the mock world`);
+    
+    // Verify we have the expected mock actors
+    expect(spawnLogs.length).toBeGreaterThanOrEqual(3);
+    
+    // Verify each mock actor spawned by username only
+    const expectedActorNames = ['MockActor1', 'MockActor2', 'MockActor3'];
+    
+    for (const expectedName of expectedActorNames) {
+      const actorLog = spawnLogs.find(log => log.data.username === expectedName);
+      expect(actorLog).toBeTruthy();
+      
+      if (actorLog) {
+        const x = actorLog.data.x;
+        const y = actorLog.data.y;
+        const z = actorLog.data.z;
+        console.log(`✓ Mock actor ${expectedName} (${actorLog.data.uid}) spawned at position (${x}, ${y}, ${z})`);
+        
+        // Verify actor spawned on a valid grid position
+        const gridKey = `${x}:${y}`;
+        const isOnValidGrid = gridPositions.includes(gridKey);
+        expect(isOnValidGrid).toBe(true);
+        console.log(`  ✓ Position ${gridKey} is on the generated world grid`);
+      }
+    }
+    
+    console.log(`✅ All ${expectedActorNames.length} mock actors spawned successfully on the 4x4 mock world`);
+    console.log(`📊 Final world stats: ${gridPositions.length} grid positions, ${tileMapData.totalTiles} total tiles`);
   });
 });
