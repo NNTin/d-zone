@@ -149,6 +149,31 @@ class GameLogger {
     }, `Spawn analysis: ${data.validSpawnPositions} valid, ${data.invalidSpawnPositions} invalid positions`);
   }
 
+  /**
+   * World tile map created
+   */
+  worldTileMap(data: {
+    totalTiles: number;
+    uniqueTileCodes: number;
+    tilesByCode: Record<string, number>;
+    gridTileTypes: Record<string, string>;
+    tileMap: Record<string, { 
+      tileCode: string; 
+      x: number; 
+      y: number; 
+      z: number;
+      grid: string;
+    }>;
+  }): void {
+    if (!this.enabled) return;
+    this.baseLogger.info({
+      category: 'world',
+      event: 'tile_map',
+      timestamp: Date.now(),
+      ...data
+    }, `Tile map created: ${data.totalTiles} tiles, ${data.uniqueTileCodes} unique tile codes`);
+  }
+
   // ===========================================
   // ACTOR SYSTEM EVENTS
   // ===========================================

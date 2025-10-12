@@ -472,8 +472,60 @@ export default class World extends EventEmitter {
         }
         this.staticMap.sort(function(a, b) { return a.zDepth - b.zDepth; });
         
+        // Log tile map for E2E testing
+        this.logTileMap();
+        
         // Log valid spawn positions for E2E testing
         this.logValidSpawnPositions();
+    }
+
+    private logTileMap(): void {
+        // Create complete tile map data for E2E testing
+        const completeTileMap: Record<string, { 
+            tileCode: string; 
+            x: number; 
+            y: number; 
+            z: number;
+            grid: string;
+        }> = {};
+        
+        const tileCodeCounts: Record<string, number> = {};
+        
+        for (const tileGrid in this.tileMap) {
+            if (!this.tileMap.hasOwnProperty(tileGrid)) continue;
+            
+            const tile = this.tileMap[tileGrid] as any; // Access the generated tile data
+            const tileCode = tile.tileCode || 'UNKNOWN';
+            const position = tile.position;
+            
+            // Store complete tile information
+            completeTileMap[tileGrid] = {
+                tileCode: tileCode,
+                x: position.x,
+                y: position.y,
+                z: position.z,
+                grid: tileGrid
+            };
+            
+            // Count tile codes for summary
+            tileCodeCounts[tileCode] = (tileCodeCounts[tileCode] || 0) + 1;
+        }
+        
+        // Also create a simple grid-based representation showing what tile type is at each coordinate
+        const gridTileTypes: Record<string, string> = {};
+        for (const gridKey in this.map) {
+            if (!this.map.hasOwnProperty(gridKey)) continue;
+            const slab = this.map[gridKey];
+            gridTileTypes[gridKey] = slab.style; // grass, plain, or flowers
+        }
+        
+        gameLogger.worldTileMap({
+            totalTiles: Object.keys(this.tileMap).length,
+            uniqueTileCodes: Object.keys(tileCodeCounts).length,
+            tilesByCode: tileCodeCounts,
+            gridTileTypes: gridTileTypes, // Map of "x:y" -> "grass"|"plain"|"flowers"
+            tileMap: completeTileMap // Complete tile map: "z:x:y" -> { tileCode, x, y, z, grid }
+        });
     }
 
     private logValidSpawnPositions(): void {
