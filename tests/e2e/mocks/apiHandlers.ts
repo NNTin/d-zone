@@ -3,10 +3,10 @@
  * Used primarily in E2E tests
  */
 
-/**
- * Get the init script string to inject MockWebSocket into the page
- * Use this with page.addInitScript() before navigating to the page
- * 
+// Export world generation mock
+export { getMockWorldGenerationScript } from './worldGenerationMock.js';
+
+/** 
  * Example:
  * ```typescript
  * await page.addInitScript(getMockWebSocketScript());
@@ -143,82 +143,5 @@ export function getMockWebSocketScript() {
     // Replace the global WebSocket with our mock
     (window as any).WebSocket = MockWebSocket;
     console.log('✓ [INIT SCRIPT] WebSocket replaced with MockWebSocket');
-  };
-}
-
-/**
- * Get the init script to mock world generation with a simple square island
- * Use this with page.addInitScript() before navigating to the page
- * 
- * This works by intercepting the geometry module's noise generation functions
- * to return flat terrain, creating a simple square island instead of complex terrain.
- * 
- * @param size - The size of the square world (e.g., 4 for a 4x4 world)
- * 
- * Example:
- * ```typescript
- * await page.addInitScript(getMockWorldGenerationScript(4));
- * ```
- */
-export function getMockWorldGenerationScript(size: number = 4) {
-  return () => {
-    console.log(`🌍 [INIT SCRIPT] Setting up ${size}x${size} mock world generation`);
-    
-    // Set mock flags for potential use
-    (window as any).__mockWorldGeneration = true;
-    (window as any).__mockWorldSize = size;
-    
-    // Create a mock noise map generator that returns flat terrain
-    const createMockNoiseMap = (mapSize: number) => {
-      const result: number[][] = [];
-      for (let i = 0; i < mapSize; i++) {
-        result[i] = [];
-        for (let j = 0; j < mapSize; j++) {
-          // Return low values (0.1) to create land everywhere
-          // This creates a simple square island
-          result[i][j] = 0.1;
-        }
-      }
-      return result;
-    };
-    
-    // We'll monkey-patch the geometry module when it's loaded
-    // Store the original define/require if they exist
-    const originalWindow = window as any;
-    
-    // Hook into module loading to intercept geometry module
-    if (originalWindow.require && originalWindow.require.defined) {
-      const checkAndPatch = () => {
-        try {
-          // Try to get the geometry module if it's already defined
-          const geometryModule = originalWindow.require('script/common/geometry');
-          if (geometryModule && geometryModule.generateNoiseMap) {
-            console.log('🎯 [INIT SCRIPT] Found geometry module, patching generateNoiseMap');
-            const originalGenerateNoiseMap = geometryModule.generateNoiseMap;
-            
-            geometryModule.generateNoiseMap = function(mapSize: number) {
-              console.log(`🌍 [MOCK] generateNoiseMap called with size ${mapSize}, returning mock flat terrain`);
-              return createMockNoiseMap(mapSize);
-            };
-            
-            console.log('✓ [INIT SCRIPT] generateNoiseMap patched successfully');
-          }
-        } catch (e) {
-          // Module not loaded yet, that's okay
-        }
-      };
-      
-      // Try to patch immediately
-      checkAndPatch();
-      
-      // Also try again after a short delay in case modules load later
-      setTimeout(checkAndPatch, 100);
-      setTimeout(checkAndPatch, 500);
-    }
-    
-    // Alternative: Store the mock function for manual use if needed
-    (window as any).__mockNoiseMap = createMockNoiseMap;
-    
-    console.log(`✓ [INIT SCRIPT] Mock world generation configured for ${size}x${size} world`);
   };
 }

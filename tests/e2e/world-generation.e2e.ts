@@ -148,7 +148,13 @@ test.describe('@critical World Generation', () => {
   });
 
   test('@normal should generate a 4x4 mock world with 3 mock actors', async ({ page }) => {
-    console.log('🧪 Testing 4x4 mock world generation with mocked WebSocket and world generation');
+    console.log('🧪 Testing 24x24 mock square world generation with mocked WebSocket and world generation');
+    
+    // Listen to ALL browser console logs for debugging
+    page.on('console', msg => {
+      const text = msg.text();
+      console.log(`[BROWSER] ${text}`);
+    });
     
     // Mock WebSocket BEFORE page loads (using the same mock as the previous test)
     console.log('🔌 Setting up WebSocket mock...');
@@ -156,10 +162,20 @@ test.describe('@critical World Generation', () => {
     
     // Mock World Generation BEFORE page loads
     console.log('🌍 Setting up World generation mock...');
-    await page.addInitScript(getMockWorldGenerationScript(4));
+    await page.addInitScript(getMockWorldGenerationScript());
     
     console.log('🌐 Loading page with mocked WebSocket and World...');
     await page.goto('/?e2e-test=true');
+    
+    // Check if mock was set up
+    const mockStatus = await page.evaluate(() => {
+      return {
+        mockWorldGeneration: (window as any).__mockWorldGeneration,
+        mockWorldSize: (window as any).__mockWorldSize,
+        defineWrapped: typeof (window as any).define === 'function'
+      };
+    });
+    console.log('🔍 Mock status after page load:', mockStatus);
     
     // Verify canvas is visible
     await GameAssertions.assertCanvasVisible(page);
@@ -207,20 +223,26 @@ test.describe('@critical World Generation', () => {
     console.log(`📊 Tile map: ${tileMapData.totalTiles} tiles, ${tileMapData.uniqueTileCodes} unique codes`);
     console.log(`📊 Grid tile types: ${Object.keys(tileMapData.gridTileTypes).length} positions`);
     
-    // Verify the world is a 4x4 grid (expecting 16 grid positions)
-    // Note: The actual tile count may be higher due to tile subdivision
+    // Verify the world is a 24x24 square (expecting 576 grid positions for perfect square)
+    // The mock ensures all tiles are land, creating a perfect square island
     const gridPositions = Object.keys(tileMapData.gridTileTypes);
-    console.log(`📍 Grid positions: ${gridPositions.join(', ')}`);
+    console.log(`📍 First 20 grid positions: ${gridPositions.slice(0, 20).join(', ')}`);
+    console.log(`📍 Total grid positions: ${gridPositions.length}`);
     
-    // For a 4x4 world, we expect positions from -1 to 2 in x and y (or similar based on world generation)
-    expect(gridPositions.length).toBeGreaterThanOrEqual(12); // At least 12 positions for a small world
-    expect(gridPositions.length).toBeLessThanOrEqual(20); // But not too many
+    // For a 24x24 world with flat terrain, we expect exactly 576 positions (24*24)
+    // With the mock, all tiles should be land since noise values are 0.1
+    expect(gridPositions.length).toBeGreaterThanOrEqual(500); // At least 500 positions
+    expect(gridPositions.length).toBeLessThanOrEqual(600); // But not more than 600
     
-    // Verify tile types exist
+    // Verify tile types - with flat terrain, should be mostly grass
     const tileTypes = Object.values(tileMapData.gridTileTypes);
     const hasGrass = tileTypes.includes('grass');
-    const hasPlain = tileTypes.includes('plain');
-    console.log(`✓ World has grass: ${hasGrass}, plain/slab: ${hasPlain}`);
+    console.log(`✓ World has grass tiles: ${hasGrass}`);
+    
+    // All tiles should be land (no water) with our flat terrain mock
+    const allLand = tileTypes.every(type => type !== 'water' && type !== 'deepwater');
+    console.log(`✓ All tiles are land (no water): ${allLand}`);
+    expect(allLand).toBe(true);
     
     // Wait for actors to spawn from our mock data
     console.log('⏳ Waiting for mock actors to spawn...');
@@ -254,7 +276,7 @@ test.describe('@critical World Generation', () => {
       }
     }
     
-    console.log(`✅ All ${expectedActorNames.length} mock actors spawned successfully on the 4x4 mock world`);
+    console.log(`✅ All ${expectedActorNames.length} mock actors spawned successfully on the 24x24 mock square world`);
     console.log(`📊 Final world stats: ${gridPositions.length} grid positions, ${tileMapData.totalTiles} total tiles`);
   });
 });

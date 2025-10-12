@@ -99,7 +99,19 @@ export default class World extends EventEmitter {
             TileClass = TileModule.default;
             TileSheetClass = TileSheetModule.default;
             PathfinderClass = PathfinderModule.default;
-            this.generateWorld();
+            
+            // Expose classes for E2E testing
+            if (typeof window !== 'undefined' && (window as any).__E2E_TEST_MODE) {
+                (window as any).__WorldDependencies = {
+                    Slab: SlabClass,
+                    Tile: TileClass,
+                    TileSheet: TileSheetClass,
+                    Pathfinder: PathfinderClass
+                };
+                console.log('✅ [E2E] World dependencies exposed');
+            }
+            
+            // Note: generateWorld() is now called explicitly from main.ts after init completes
         } catch (error) {
             gameLogger.error('World: Failed to load world dependencies', {
                 error: error instanceof Error ? error.message : String(error),
@@ -110,7 +122,7 @@ export default class World extends EventEmitter {
         }
     }
 
-    private generateWorld(): void {
+    generateWorld(): void {
         geometry.generateClosestGrids(this.worldSize);
         
         testCanvas.clear();
@@ -699,5 +711,16 @@ export default class World extends EventEmitter {
             }
         }
         return null;
+    }
+}
+
+// Expose World class for E2E testing as soon as it's defined
+if (typeof window !== 'undefined' && (window as any).__E2E_TEST_MODE) {
+    (window as any).__WorldClass = World;
+    console.log('✅ [E2E] World class exposed on window.__WorldClass');
+    
+    // Dispatch event so mocks can patch immediately (synchronously)
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('__worldClassReady', { detail: { World } }));
     }
 }
