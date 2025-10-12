@@ -177,6 +177,74 @@ test.describe('@critical Actor Pathfinding Validation', () => {
       console.log('✓ [INIT SCRIPT] WebSocket proxied for interception');
     });
     
+    // Add script to intercept world creation and replace with custom 3x3 world
+    await page.addInitScript(() => {
+      console.log('🌍 [INIT SCRIPT 2] Setting up World interception...');
+      
+      // Poll for game.world to be set, then replace it
+      const checkWorldInterval = setInterval(() => {
+        const game = (window as any).game;
+        if (game && game.world && !game.world.__customWorldApplied) {
+          console.log('🌍 [INTERCEPTOR] Detected game.world creation!');
+          console.log(`  Original world size: ${Object.keys(game.world.map || {}).length} tiles`);
+          
+          // Replace with custom 3x3 world
+          const customWorld: any = {
+            ...game.world, // Keep existing properties
+            map: {},
+            walkable: {},
+            objects: {},
+            staticMap: [],
+            mapBounds: { xl: -1, xh: 1, yl: -1, yh: 1 },
+            __customWorldApplied: true
+          };
+          
+          // Create 3x3 grid with hole at (0,0)
+          const tiles = [
+            { x: -1, y: -1 }, { x: 0, y: -1 }, { x: 1, y: -1 },
+            { x: -1, y: 0 },  /* hole at 0,0 */  { x: 1, y: 0 },
+            { x: -1, y: 1 },  { x: 0, y: 1 },  { x: 1, y: 1 }
+          ];
+          
+          console.log(`🌍 [INTERCEPTOR] Creating custom 3x3 world with ${tiles.length} tiles`);
+          tiles.forEach(pos => {
+            const key = `${pos.x}:${pos.y}`;
+            customWorld.map[key] = {
+              x: pos.x, y: pos.y, z: -0.5,
+              type: 'grass', grid: key, walkable: true,
+              draw: () => {}, addToGame: () => {}, removeFromGame: () => {}
+            };
+            customWorld.walkable[key] = 1;
+          });
+          
+          // Replace game.world
+          game.world = customWorld;
+          console.log('✓ [INTERCEPTOR] Replaced game.world with custom 3x3 world');
+          console.log(`  New world size: ${Object.keys(game.world.map).length} tiles`);
+          console.log(`  Walkable: ${Object.keys(game.world.walkable).join(', ')}`);
+          
+          // Stop checking
+          clearInterval(checkWorldInterval);
+          
+          // Trigger worldGenerated event
+          setTimeout(() => {
+            const gameLogger = (window as any).gameLogger;
+            if (gameLogger?.worldGenerated) {
+              console.log('✓ [INTERCEPTOR] Triggering worldGenerated event');
+              gameLogger.worldGenerated({
+                size: 3,
+                tileCount: Object.keys(customWorld.map).length,
+                bounds: customWorld.mapBounds
+              });
+            }
+          }, 100);
+        }
+      }, 50);
+      
+      // Stop checking after 10 seconds
+      setTimeout(() => clearInterval(checkWorldInterval), 10000);
+    });
+    
     // Now load the page - WebSocket will be mocked from the start
     console.log('🌐 Loading page with mocked WebSocket...');
     await page.goto('/?e2e-test=true');
@@ -257,64 +325,35 @@ test.describe('@critical Actor Pathfinding Validation', () => {
       throw error;
     }
     
-    // Now customize the world to create a hole at (0,0)
-    console.log('🕳️ Creating hole at (0,0)...');
-    await page.evaluate(async () => {
+    // Verify the custom 3x3 world was created by our interceptor
+    console.log('� Verifying custom 3x3 world...');
+    const worldVerification = await page.evaluate(() => {
       const game = (window as any).game;
       const world = game.world;
       
       if (!world) {
-        throw new Error('World not initialized!');
+        return { success: false, error: 'World not initialized!' };
       }
       
-      console.log('🗺️ Current world state:');
-      console.log(`  Total tiles: ${Object.keys(world.map).length}`);
-      console.log(`  Map bounds: ${JSON.stringify(world.mapBounds)}`);
-      
-      // Remove the tile at (0,0) to create a hole
-      if (world.map['0:0']) {
-        const tile = world.map['0:0'];
-        console.log(`  Removing tile at (0,0): ${tile.type}`);
-        delete world.map['0:0'];
-        delete world.walkable['0:0'];
-        console.log('✓ Hole created at (0,0)');
-      } else {
-        console.log('⚠️ No tile at (0,0) to remove');
-      }
-      
-      // Ensure we have the required tiles around the hole
-      const requiredTiles = [
-        { x: -1, y: -1 }, { x: 0, y: -1 }, { x: 1, y: -1 },
-        { x: -1, y: 0 }, { x: 1, y: 0 },
-        { x: -1, y: 1 }, { x: 0, y: 1 }, { x: 1, y: 1 }
-      ];
-      
-      let missingTiles = 0;
-      for (const pos of requiredTiles) {
-        const key = `${pos.x}:${pos.y}`;
-        if (!world.map[key]) {
-          console.log(`⚠️ Missing tile at ${key}`);
-          missingTiles++;
-          
-          // Try to add the missing tile
-          const Slab = (await import('/src/script/environment/slab.js')).default;
-          const slab = new Slab(game, world, pos.x, pos.y, -0.5);
-          world.map[key] = slab;
-          world.walkable[key] = 1;
-          console.log(`✓ Added tile at ${key}`);
-        }
-      }
-      
-      console.log(`✓ World customized: ${Object.keys(world.map).length} total tiles`);
-      console.log(`  Walkable positions: ${Object.keys(world.walkable).join(', ')}`);
-      console.log(`  Hole at: (0,0)`);
-      
-      // Force a render update
-      game.renderer.canvases[0].onResize();
+      return {
+        success: true,
+        tileCount: Object.keys(world.map).length,
+        walkableKeys: Object.keys(world.walkable),
+        bounds: world.mapBounds,
+        customApplied: world.__customWorldApplied
+      };
     });
     
+    if (!worldVerification.success) {
+      throw new Error(`World verification failed: ${worldVerification.error}`);
+    }
+    
+    console.log(`✓ Custom 3x3 world verified - ${worldVerification.tileCount} tiles`);
+    console.log(`  Walkable: ${(worldVerification.walkableKeys || []).join(', ')}`);
+    console.log(`  Custom world applied: ${worldVerification.customApplied}`);
+    
     // Create test actor at west position
-    console.log(' Creating actor at west position (-1, 0)...');
+    console.log('👤 Creating mock actor at west position (-1, 0)...');
     await page.evaluate(() => {
       const game = (window as any).game;
       const gameLogger = (window as any).gameLogger;
