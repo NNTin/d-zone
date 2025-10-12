@@ -61,32 +61,40 @@ Our testing strategy is built around **comprehensive coverage** with **smart exe
 
 ```
 tests/
-├── fixtures/                   # Test data and mock objects
-│   └── mockData.ts             # Centralized test data definitions
+├── unit/                       # Unit tests (Vitest)
+│   ├── *.test.ts               # Unit test files
+│   ├── mocks/                  # Unit test mocks
+│   │   └── browserMocks.ts     # Canvas API, WebSocket mocks
+│   └── utils/                  # Unit test utilities
+│       └── testHelpers.ts      # MockLocalStorage, test builders
 │
-├── mocks/                      # Mock implementations
-│   ├── apiHandlers.ts          # MSW API mocks for E2E tests
-│   └── browserMocks.ts         # Vitest browser API mocks
+├── e2e/                        # End-to-End tests (Playwright)
+│   ├── *.e2e.ts                # E2E test files
+│   ├── fixtures/               # E2E test data
+│   │   └── mockData.ts         # Mock API responses
+│   ├── mocks/                  # E2E test mocks
+│   │   └── apiHandlers.ts      # MSW API mocks
+│   └── utils/                  # E2E test utilities
+│       └── canvasTestUtils.ts  # Canvas game testing utilities
 │
-├── utils/                      # Test utilities and helpers
-│   ├── testHelpers.ts          # Custom assertions and builders
-│   ├── categories.json         # Allure report categorization
-│   └── environment.properties  # Test environment metadata
+├── shared/                     # Shared resources
+│   └── utils/                  
+│       ├── categories.json     # Allure report categorization
+│       └── environment.properties  # Test environment metadata
 │
 ├── setup.ts                    # Global test setup configuration
-├── *.test.ts                   # Unit tests (Vitest)
-├── *.e2e.ts                    # End-to-End tests (Playwright)
 ├── TESTING_GUIDE.md           # This comprehensive guide
+├── CANVAS_TESTING_GUIDE.md    # Canvas testing methodology
 └── README.md                   # Quick reference documentation
 ```
 
 ### File Naming Conventions
 
-- **Unit Tests**: `*.test.ts` - Test individual functions/classes
-- **E2E Tests**: `*.e2e.ts` - Test complete user workflows
-- **Mocks**: `*Mocks.ts` - Mock implementations
+- **Unit Tests**: `*.test.ts` - Test individual functions/classes (in `tests/unit/`)
+- **E2E Tests**: `*.e2e.ts` - Test complete user workflows (in `tests/e2e/`)
+- **Mocks**: `*Mocks.ts` or `*Handlers.ts` - Mock implementations
 - **Fixtures**: `mock*.ts` - Test data definitions
-- **Helpers**: `*Helpers.ts` - Reusable test utilities
+- **Helpers**: `*Helpers.ts` or `*Utils.ts` - Reusable test utilities
 
 ## 🏷️ Tag System
 
@@ -351,7 +359,7 @@ This approach provides robust testing for:
 
 ### Unit Test Mocking (Vitest)
 
-**Location**: `tests/mocks/browserMocks.ts`
+**Location**: `tests/unit/mocks/browserMocks.ts`
 
 **Provides**:
 - Canvas API simulation
@@ -370,7 +378,7 @@ setupGlobalMocks();
 
 ### E2E Test Mocking (MSW)
 
-**Location**: `tests/mocks/apiHandlers.ts`
+**Location**: `tests/e2e/mocks/apiHandlers.ts`
 
 **Provides**:
 - HTTP API endpoint mocking
@@ -389,7 +397,7 @@ await page.route('/api/**', route => route.fulfill({
 
 ### Test Data Management
 
-**Location**: `tests/fixtures/mockData.ts`
+**Location**: `tests/e2e/fixtures/mockData.ts`
 
 **Centralized data** for consistent testing:
 ```typescript
