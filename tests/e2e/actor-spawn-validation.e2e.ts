@@ -14,7 +14,30 @@
  */
 
 import { expect, test } from '@playwright/test';
-import { CanvasGameTestUtils, GameAssertions, GameLogEvent } from './utils/canvasTestUtils.js';
+import { CanvasGameTestUtils, GameAssertions } from './utils/canvasTestUtils.js';
+import {
+  extractSpawnAnalysisData,
+  findCoordinateErrors,
+  getActorSpawnLogs,
+  getLatestSpawnAnalysisData,
+  getSpawnAnalysisLogs,
+  getWorldGenerationData,
+  validateAllSpawnedActors,
+  validateBasicCoordinateTypes,
+  validateCoordinatesAreIntegers,
+  validateCoordinatesNotExtreme,
+  validateCoordinatesNotInfinity,
+  validateCoordinatesNotNaN,
+  validateCoordinatesWithinBounds,
+  validateNotAtBeaconPosition,
+  validateNotBeaconPosition,
+  validatePositionStringFormat,
+  validateWorldBounds,
+  validateWorldBoundsAreIntegers,
+  validateZCoordinate,
+  type ActorCoordinates,
+  type WorldGenData
+} from './utils/spawnValidationUtils.js';
 
 test.describe('@critical Actor Spawn Validation', () => {
   let gameUtils: CanvasGameTestUtils;
@@ -41,7 +64,7 @@ test.describe('@critical Actor Spawn Validation', () => {
     expect(worldGenEvent).toBeTruthy();
     expect(worldGenEvent.data).toBeTruthy();
     
-    const { spawnablePositions, mapBounds, worldRadius, totalTiles } = worldGenEvent.data;
+    const { spawnablePositions, mapBounds, worldRadius, totalTiles } = worldGenEvent.data as WorldGenData;
     
     // Verify world has valid spawn positions
     expect(spawnablePositions).toBeGreaterThan(0);
@@ -49,13 +72,8 @@ test.describe('@critical Actor Spawn Validation', () => {
     expect(mapBounds).toBeTruthy();
     expect(worldRadius).toBeGreaterThan(0);
     
-    // Verify map bounds are reasonable
-    expect(mapBounds.xl).toBeLessThanOrEqual(mapBounds.xh);
-    expect(mapBounds.yl).toBeLessThanOrEqual(mapBounds.yh);
-    expect(Math.abs(mapBounds.xl)).toBeLessThanOrEqual(worldRadius);
-    expect(Math.abs(mapBounds.xh)).toBeLessThanOrEqual(worldRadius);
-    expect(Math.abs(mapBounds.yl)).toBeLessThanOrEqual(worldRadius);
-    expect(Math.abs(mapBounds.yh)).toBeLessThanOrEqual(worldRadius);
+    // Verify map bounds are reasonable using utility
+    validateWorldBounds(mapBounds, worldRadius);
     
     // Verify sample spawn positions are valid coordinates
     if (worldGenEvent.data.spawnPositions) {
@@ -63,15 +81,8 @@ test.describe('@critical Actor Spawn Validation', () => {
       expect(Array.isArray(samplePositions)).toBe(true);
       
       for (const pos of samplePositions) {
-        expect(typeof pos).toBe('string');
-        const [x, y] = pos.split(':').map(Number);
-        expect(Number.isInteger(x)).toBe(true);
-        expect(Number.isInteger(y)).toBe(true);
-        expect(Number.isFinite(x)).toBe(true);
-        expect(Number.isFinite(y)).toBe(true);
-        
-        // Should not be the beacon position
-        expect(!(x === 0 && y === 0)).toBe(true);
+        validatePositionStringFormat(pos);
+        validateNotBeaconPosition(pos);
       }
     }
     
@@ -83,34 +94,21 @@ test.describe('@critical Actor Spawn Validation', () => {
     await gameUtils.waitForGameEvent('game', 'initialized', 15000);
     await gameUtils.waitForGameEvent('world', 'generated', 15000);
     
-    // Check for spawn position analysis logs
-    const allWorldLogs = gameUtils.getLogsByCategory('world');
-    console.log('🔍 All world logs:', allWorldLogs.map(log => ({ event: log.event, level: log.level, dataKeys: Object.keys(log.data || {}) })));
+    // Check for spawn position analysis logs using utility
+    const spawnAnalysisLogs = getSpawnAnalysisLogs(gameUtils);
     
-    const spawnAnalysisLogs = allWorldLogs.filter(log => 
-      log.event === 'spawn_analysis'
-    );
-    
+    // Log debug info if no analysis found
     if (spawnAnalysisLogs.length === 0) {
-      // Try checking all logs for the spawn analysis data
-      const allLogs = gameUtils.getAllLogs();
-      const anySpawnLogs = allLogs.filter(log => 
-        log.event === 'spawn_analysis'
-      );
-      console.log('🔍 Found spawn analysis in any category:', anySpawnLogs.length);
-      if (anySpawnLogs.length > 0) {
-        spawnAnalysisLogs.push(...anySpawnLogs);
-      }
+      const allWorldLogs = gameUtils.getLogsByCategory('world');
+      console.log('🔍 All world logs:', allWorldLogs.map(log => ({ 
+        event: log.event, 
+        level: log.level, 
+        dataKeys: Object.keys(log.data || {}) 
+      })));
     }
     
     expect(spawnAnalysisLogs.length).toBeGreaterThan(0);
-    const spawnAnalysisData = spawnAnalysisLogs[0].data as {
-      totalPositions: number;
-      validSpawnPositions: number;
-      invalidSpawnPositions: number;
-      validPositions: string[];
-      invalidPositions: string[];
-    };
+    const spawnAnalysisData = extractSpawnAnalysisData(spawnAnalysisLogs)!;
     
     console.log(`📊 Spawn analysis: ${spawnAnalysisData.validSpawnPositions} valid, ${spawnAnalysisData.invalidSpawnPositions} invalid positions`);
     console.log(`📍 Sample valid positions: ${spawnAnalysisData.validPositions.slice(0, 5).join(', ')}`);
@@ -126,14 +124,9 @@ test.describe('@critical Actor Spawn Validation', () => {
     expect(Array.isArray(spawnAnalysisData.validPositions)).toBe(true);
     expect(spawnAnalysisData.validPositions.length).toBeGreaterThan(0);
     
-    // Check format of position strings (should be "x:y")
+    // Check format of position strings using utility
     for (const pos of spawnAnalysisData.validPositions.slice(0, 5)) {
-      expect(typeof pos).toBe('string');
-      expect(pos).toMatch(/^-?\d+:-?\d+$/); // Format: "x:y" where x,y are integers
-      
-      const [x, y] = pos.split(':').map(Number);
-      expect(Number.isInteger(x)).toBe(true);
-      expect(Number.isInteger(y)).toBe(true);
+      validatePositionStringFormat(pos);
     }
     
     // Ensure beacon position (0:0) is not in valid spawn positions
@@ -155,118 +148,77 @@ test.describe('@critical Actor Spawn Validation', () => {
     await gameUtils.waitForGameEvent('game', 'initialized', 15000);
     await gameUtils.waitForGameEvent('world', 'generated', 10000);
     
-    // Get world bounds for validation
-    const worldGenLogs = gameUtils.getLogsByCategory('world')
-      .filter(log => log.event === 'generated');
-    const worldInfo = worldGenLogs[0];
-    const { mapBounds } = worldInfo.data;
+    // Get world data using utility
+    const worldData = getWorldGenerationData(gameUtils);
+    expect(worldData).toBeTruthy();
+    const { mapBounds } = worldData!;
     
-    // Get spawn position analysis to validate against
-    const spawnAnalysisLogs = gameUtils.getLogsByCategory('world')
-      .filter(log => log.event === 'spawn_analysis');
+    // Get spawn position analysis using utility
+    const spawnAnalysisData = extractSpawnAnalysisData(getSpawnAnalysisLogs(gameUtils));
+    const validSpawnPositions = spawnAnalysisData?.validPositions || [];
+    const invalidSpawnPositions = spawnAnalysisData?.invalidPositions || [];
     
-    let validSpawnPositions: string[] = [];
-    let invalidSpawnPositions: string[] = [];
-    
-    if (spawnAnalysisLogs.length > 0) {
-      const spawnAnalysisData = spawnAnalysisLogs[0].data;
-      validSpawnPositions = spawnAnalysisData.validPositions || [];
-      invalidSpawnPositions = spawnAnalysisData.invalidPositions || [];
+    if (validSpawnPositions.length > 0) {
       console.log(`📊 World has ${validSpawnPositions.length} valid spawn positions, ${invalidSpawnPositions.length} invalid positions`);
     }
     
-    // Check logs from initialization (don't clear - need server-join message!)
+    // Check logs from initialization
     console.log('🔍 Checking logs from initialization...');
     
-    // Get all captured logs for analysis
-    const allLogs = gameUtils.getAllLogs();
-    const logsByCategory = allLogs.reduce((acc, log) => {
-      acc[log.category] = (acc[log.category] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-    
-    // Check for actor spawn events
-    const actorLogs = gameUtils.getLogsByCategory('actor');
-    console.log(`📊 Actor logs found: ${actorLogs.length}`);
-    
-    // Get any actor spawn events that occurred
-    const spawnLogs = gameUtils.getLogsByCategory('actor')
-      .filter(log => log.event === 'spawned');
+    // Get actor spawn logs using utility
+    const spawnLogs = getActorSpawnLogs(gameUtils);
+    console.log(`📊 Actor logs found: ${spawnLogs.length}`);
     
     if (spawnLogs.length === 0) {
       console.log('ℹ No actors spawned automatically - test validates coordinate format requirements');
       
       // Test the coordinate validation logic by checking that the world bounds are reasonable
-      expect(mapBounds.xl).toBeLessThanOrEqual(mapBounds.xh);
-      expect(mapBounds.yl).toBeLessThanOrEqual(mapBounds.yh);
-      expect(Number.isInteger(mapBounds.xl)).toBe(true);
-      expect(Number.isInteger(mapBounds.xh)).toBe(true);
-      expect(Number.isInteger(mapBounds.yl)).toBe(true);
-      expect(Number.isInteger(mapBounds.yh)).toBe(true);
+      validateWorldBoundsAreIntegers(mapBounds);
       
       console.log('✓ World bounds are valid integers for coordinate system');
       return;
     }
     
-    // If actors did spawn, validate their coordinates
+    // If actors did spawn, validate their coordinates using utilities
     console.log(`Found ${spawnLogs.length} actor spawn(s) to validate`);
     
     for (const spawnLog of spawnLogs) {
-      const { uid, username, x, y, z } = spawnLog.data;
+      const coords: ActorCoordinates = {
+        uid: spawnLog.data.uid,
+        username: spawnLog.data.username,
+        x: spawnLog.data.x,
+        y: spawnLog.data.y,
+        z: spawnLog.data.z
+      };
       
-      // Basic coordinate validation
-      expect(typeof x).toBe('number');
-      expect(typeof y).toBe('number');
-      expect(typeof z).toBe('number');
-      
-      expect(Number.isFinite(x)).toBe(true);
-      expect(Number.isFinite(y)).toBe(true);
-      expect(Number.isFinite(z)).toBe(true);
-      
-      // Coordinates should not be NaN
-      expect(Number.isNaN(x)).toBe(false);
-      expect(Number.isNaN(y)).toBe(false);
-      expect(Number.isNaN(z)).toBe(false);
-      
-      // X and Y should be integers (grid-based world)
-      expect(Number.isInteger(x)).toBe(true);
-      expect(Number.isInteger(y)).toBe(true);
-      
-      // Coordinates should be within reasonable world bounds
-      expect(x).toBeGreaterThanOrEqual(mapBounds.xl - 1);
-      expect(x).toBeLessThanOrEqual(mapBounds.xh + 1);
-      expect(y).toBeGreaterThanOrEqual(mapBounds.yl - 1);
-      expect(y).toBeLessThanOrEqual(mapBounds.yh + 1);
-      
-      // Z coordinate should be reasonable
-      expect(z).toBeGreaterThanOrEqual(-10);
-      expect(z).toBeLessThanOrEqual(10);
-      
-      // Should not spawn at beacon position
-      expect(!(x === 0 && y === 0)).toBe(true);
+      // Use validation utilities
+      validateBasicCoordinateTypes(coords);
+      validateCoordinatesNotNaN(coords);
+      validateCoordinatesAreIntegers(coords);
+      validateCoordinatesWithinBounds(coords, mapBounds);
+      validateZCoordinate(coords.z);
+      validateNotAtBeaconPosition(coords);
       
       // Check if actor spawned in a position that was marked as valid
-      const actorPosition = `${x}:${y}`;
-      
       if (validSpawnPositions.length > 0) {
+        const actorPosition = `${coords.x}:${coords.y}`;
         const isValidPosition = validSpawnPositions.includes(actorPosition);
-        const isInvalidPosition = invalidSpawnPositions.some(pos => pos.startsWith(actorPosition));
         
         if (!isValidPosition) {
-          console.log(`❌ Actor ${username} spawned at INVALID position (${x}, ${y}, ${z}) - not in valid spawn list`);
+          console.log(`❌ Actor ${coords.username} spawned at INVALID position (${coords.x}, ${coords.y}, ${coords.z}) - not in valid spawn list`);
           console.log(`📍 Valid positions sample: ${validSpawnPositions.slice(0, 10).join(', ')}`);
           console.log(`🚫 Invalid positions: ${invalidSpawnPositions.join(', ')}`);
           
           // The test should fail when actors spawn at invalid positions
           expect(isValidPosition).toBe(true);
         } else {
-          console.log(`✓ Actor ${username} spawned at VALID position (${x}, ${y}, ${z})`);
+          console.log(`✓ Actor ${coords.username} spawned at VALID position (${coords.x}, ${coords.y}, ${coords.z})`);
         }
       } else {
-        console.log(`⚠️  No spawn position analysis data available for ${username} at (${x}, ${y}, ${z})`);
+        console.log(`⚠️  No spawn position analysis data available for ${coords.username} at (${coords.x}, ${coords.y}, ${coords.z})`);
       }
       
-      console.log(`✓ Actor ${username} (${uid}) has valid coordinates: (${x}, ${y}, ${z})`);
+      console.log(`✓ Actor ${coords.username} (${coords.uid}) has valid coordinates: (${coords.x}, ${coords.y}, ${coords.z})`);
     }
   });
 
@@ -279,42 +231,28 @@ test.describe('@critical Actor Spawn Validation', () => {
     gameUtils.clearLogs();
     await page.waitForTimeout(15000); // Wait longer for potential issues
     
-    // Check for any coordinate-related error logs
-    const allRecentLogs = gameUtils.getAllLogs();
-    const coordinateErrors = allRecentLogs
-      .filter((log: GameLogEvent) => 
-        log.level === 'error' && 
-        (log.data?.hasNaN === true || 
-         (typeof log.data === 'object' && 
-          log.data !== null && 
-          Object.values(log.data).some((value: any) => 
-            typeof value === 'number' && (Number.isNaN(value) || !Number.isFinite(value))
-          )))
-      );
+    // Check for coordinate-related errors using utility
+    const coordinateErrors = findCoordinateErrors(gameUtils);
     
     // Should have no coordinate-related errors
     expect(coordinateErrors.length).toBe(0);
     
     // Also check for any actor spawn events and validate them
-    const spawnLogs = gameUtils.getLogsByCategory('actor')
-      .filter(log => log.event === 'spawned');
+    const spawnLogs = getActorSpawnLogs(gameUtils);
     
     // If any actors spawned, verify they have clean coordinate data
     for (const spawnLog of spawnLogs) {
-      const { x, y, z } = spawnLog.data;
+      const coords: ActorCoordinates = {
+        uid: spawnLog.data.uid,
+        username: spawnLog.data.username,
+        x: spawnLog.data.x,
+        y: spawnLog.data.y,
+        z: spawnLog.data.z
+      };
       
-      // Should not be edge case values
-      expect(x).not.toBe(Infinity);
-      expect(x).not.toBe(-Infinity);
-      expect(y).not.toBe(Infinity);
-      expect(y).not.toBe(-Infinity);
-      expect(z).not.toBe(Infinity);
-      expect(z).not.toBe(-Infinity);
-      
-      // Should not be extremely large values that might indicate calculation errors
-      expect(Math.abs(x)).toBeLessThan(1000);
-      expect(Math.abs(y)).toBeLessThan(1000);
-      expect(Math.abs(z)).toBeLessThan(100);
+      // Use validation utilities for edge cases
+      validateCoordinatesNotInfinity(coords);
+      validateCoordinatesNotExtreme(coords);
     }
     
     if (spawnLogs.length > 0) {
@@ -332,24 +270,21 @@ test.describe('@critical Actor Spawn Validation', () => {
     console.log('🔍 Phase 1: Validating initial server actors...');
     
     // Get initial actor spawns from the default server
-    const initialActorLogs = gameUtils.getLogsByCategory('actor')
-      .filter(log => log.event === 'spawned');
-    
+    const initialActorLogs = getActorSpawnLogs(gameUtils);
     console.log(`📊 Initial server spawned ${initialActorLogs.length} actors`);
     
-    // Validate initial actors if any spawned
+    // Validate initial actors if any spawned using basic validation
     for (const log of initialActorLogs) {
-      const { uid, username, x, y, z } = log.data;
+      const coords: ActorCoordinates = {
+        uid: log.data.uid,
+        username: log.data.username,
+        x: log.data.x,
+        y: log.data.y,
+        z: log.data.z
+      };
       
-      // Validate coordinate types and values
-      expect(typeof x).toBe('number');
-      expect(typeof y).toBe('number');
-      expect(typeof z).toBe('number');
-      expect(Number.isFinite(x)).toBe(true);
-      expect(Number.isFinite(y)).toBe(true);
-      expect(Number.isFinite(z)).toBe(true);
-      
-      console.log(`✓ Initial actor ${username} at (${x}, ${y}, ${z})`);
+      validateBasicCoordinateTypes(coords);
+      console.log(`✓ Initial actor ${coords.username} at (${coords.x}, ${coords.y}, ${coords.z})`);
     }
     
     console.log('🔄 Phase 2: Switching to "My Repos" server...');
@@ -411,8 +346,7 @@ test.describe('@critical Actor Spawn Validation', () => {
     await gameUtils.waitForGameEvent('world', 'generated', 10000);
     
     // Check for new actor spawns after server switch
-    const newActorLogs = gameUtils.getLogsByCategory('actor')
-      .filter(log => log.event === 'spawned');
+    const newActorLogs = getActorSpawnLogs(gameUtils);
     
     console.log(`📊 "${availableServers.find(s => s.id === targetServer)?.name || targetServer}" server spawned ${newActorLogs.length} new actors`);
     
@@ -431,92 +365,37 @@ test.describe('@critical Actor Spawn Validation', () => {
     } else {
       console.log(`🔍 Validating ${newActorLogs.length} new actors from server switch...`);
       
-      // Get spawn position analysis for the new world after server switch
-      const newSpawnAnalysisLogs = gameUtils.getLogsByCategory('world')
-        .filter(log => log.event === 'spawn_analysis');
+      // Get world data and spawn analysis for the new world
+      const newWorldData = getWorldGenerationData(gameUtils);
+      const newSpawnAnalysisData = getLatestSpawnAnalysisData(gameUtils);
       
-      let newValidSpawnPositions: string[] = [];
-      let newInvalidSpawnPositions: string[] = [];
+      const newValidSpawnPositions = newSpawnAnalysisData?.validPositions || [];
       
-      // Get the most recent spawn analysis (after server switch)
-      if (newSpawnAnalysisLogs.length > 0) {
-        const latestSpawnAnalysis = newSpawnAnalysisLogs[newSpawnAnalysisLogs.length - 1];
-        newValidSpawnPositions = latestSpawnAnalysis.data.validPositions || [];
-        newInvalidSpawnPositions = latestSpawnAnalysis.data.invalidPositions || [];
+      if (newValidSpawnPositions.length > 0) {
         console.log(`📊 New world has ${newValidSpawnPositions.length} valid spawn positions`);
       }
       
-      // Validate each new spawned actor's coordinates
-      // NOTE: User mentioned there might be a bug with actors spawning on invalid positions
-      let validActors = 0;
-      let invalidActors = 0;
+      // Use the comprehensive validation utility
+      const validationResults = validateAllSpawnedActors(
+        gameUtils,
+        newWorldData!.mapBounds,
+        newValidSpawnPositions
+      );
       
-      for (const log of newActorLogs) {
-        const { uid, username, x, y, z } = log.data;
-        
-        try {
-          // Check coordinate types
-          expect(typeof x).toBe('number');
-          expect(typeof y).toBe('number');
-          expect(typeof z).toBe('number');
-          expect(Number.isFinite(x)).toBe(true);
-          expect(Number.isFinite(y)).toBe(true);
-          expect(Number.isFinite(z)).toBe(true);
-          
-          // Check if coordinates are integers (valid positions)
-          const isValidX = Number.isInteger(x);
-          const isValidY = Number.isInteger(y);
-          const isValidZ = Number.isInteger(z);
-          
-          // Check if actor spawned in a position marked as valid in the new world
-          const actorPosition = `${x}:${y}`;
-          let spawnedInValidPosition = true;
-          
-          if (newValidSpawnPositions.length > 0) {
-            spawnedInValidPosition = newValidSpawnPositions.includes(actorPosition);
-            
-            if (!spawnedInValidPosition) {
-              console.log(`❌ Actor ${username} spawned at INVALID position (${x}, ${y}, ${z}) - not in new world's valid spawn list`);
-              console.log(`📍 Sample valid positions: ${newValidSpawnPositions.slice(0, 5).join(', ')}`);
-              
-              // The test should fail when actors spawn at invalid positions
-              expect(spawnedInValidPosition).toBe(true);
-            }
-          }
-          
-          if (isValidX && isValidY && isValidZ && spawnedInValidPosition) {
-            console.log(`✓ Actor ${username} has valid integer coordinates: (${x}, ${y}, ${z})`);
-            validActors++;
-          } else {
-            if (!isValidX || !isValidY || !isValidZ) {
-              console.log(`❌ Actor ${username} has invalid coordinates: (${x}, ${y}, ${z}) - non-integer values detected`);
-              expect(isValidX && isValidY && isValidZ).toBe(true);
-            }
-            if (!spawnedInValidPosition) {
-              console.log(`❌ Actor ${username} spawned at invalid world position: (${x}, ${y}, ${z})`);
-              expect(spawnedInValidPosition).toBe(true);
-            }
-            invalidActors++;
-          }
-          
-          // Check for beacon position (should not spawn at 0,0)
-          if (x === 0 && y === 0) {
-            console.log(`⚠️  Actor ${username} spawned at beacon position (0, 0) - potential issue`);
-          }
-          
-        } catch (error) {
-          console.log(`❌ Actor ${username} failed coordinate validation:`, error);
-          invalidActors++;
+      console.log(`📊 Coordinate validation summary: ${validationResults.validActors} valid, ${validationResults.invalidActors} invalid actors`);
+      
+      // Log any errors found
+      if (validationResults.errors.length > 0) {
+        for (const error of validationResults.errors) {
+          console.log(`❌ Actor ${error.actor} validation errors:`, error.errors);
         }
       }
       
-      console.log(`📊 Coordinate validation summary: ${validActors} valid, ${invalidActors} invalid actors`);
-      
       // All actors should have valid coordinates - the test should fail if any don't
-      expect(invalidActors).toBe(0);
+      expect(validationResults.invalidActors).toBe(0);
       
       // Ensure at least some actors were processed
-      expect(validActors + invalidActors).toBeGreaterThan(0);
+      expect(validationResults.totalActors).toBeGreaterThan(0);
     }
   });
 });
