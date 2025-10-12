@@ -665,6 +665,12 @@ class GameLogger {
 // Create and export the game logger instance
 export const gameLogger = new GameLogger(logger);
 
+// Expose gameLogger on window for E2E tests
+if (typeof window !== 'undefined' && (window as any).__E2E_TEST_MODE) {
+  (window as any).gameLogger = gameLogger;
+  console.log('✅ [E2E] gameLogger exposed on window.gameLogger');
+}
+
 // Export the base logger for special cases
 export { logger as baseLogger };
 

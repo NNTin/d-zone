@@ -82,5 +82,8 @@ export default defineConfig({
     timeout: 120 * 1000,
     stdout: 'pipe',
     stderr: 'pipe',
+    env: {
+      E2E_MODE: 'true'
+    }
   },
 });

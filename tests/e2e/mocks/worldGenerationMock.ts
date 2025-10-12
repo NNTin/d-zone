@@ -90,9 +90,10 @@ export function getMockWorldGenerationScript() {
         // Calculate spawnable positions (exclude beacon at 0:0)
         const spawnablePositions = Object.keys(this.map).filter(key => key !== '0:0');
         
-        // Call gameLogger like the real generateWorld does
-        if (typeof window !== 'undefined' && (window as any).gameLogger) {
-          (window as any).gameLogger.worldGenerated({
+        // Log world generation with gameLogger
+        const gameLogger = (window as any).gameLogger;
+        if (gameLogger) {
+          gameLogger.worldGenerated({
             totalTiles: Object.keys(this.map).length,
             spawnablePositions: spawnablePositions.length,
             worldSize: mockWorldSize,
@@ -103,7 +104,9 @@ export function getMockWorldGenerationScript() {
             spawnPositions: spawnablePositions.slice(0, 10)
           });
           
-          (window as any).gameLogger.info('World: Created world', { tileCount: Object.keys(this.map).length });
+          gameLogger.info('World: Created world', { tileCount: Object.keys(this.map).length });
+        } else {
+          console.warn('⚠️ [WORLD MOCK] gameLogger not available on window');
         }
         
         console.log('✅ [WORLD MOCK] Mock world generation complete');
