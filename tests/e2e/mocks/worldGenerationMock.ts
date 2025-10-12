@@ -87,27 +87,31 @@ export function getMockWorldGenerationScript() {
           (window as any).__WorldDependencies.Pathfinder.loadMap(this.walkable);
         }
         
-        // Calculate spawnable positions (exclude beacon at 0:0)
-        const spawnablePositions = Object.keys(this.map).filter(key => key !== '0:0');
+        // Set up unoccupiedGrids by calling the tail end of the original implementation
+        // This is needed for actors to spawn via randomEmptyGrid()
+        console.log('🔧 [WORLD MOCK] Finalizing world setup...');
         
-        // Log world generation with gameLogger
-        const gameLogger = (window as any).gameLogger;
-        if (gameLogger) {
-          gameLogger.worldGenerated({
-            totalTiles: Object.keys(this.map).length,
-            spawnablePositions: spawnablePositions.length,
-            worldSize: mockWorldSize,
-            worldRadius: mockWorldRadius,
-            mapBounds: this.mapBounds,
-            mainIslandSize: this.islands[this.mainIsland]?.length || 0,
-            totalIslands: this.islands.length,
-            spawnPositions: spawnablePositions.slice(0, 10)
-          });
-          
-          gameLogger.info('World: Created world', { tileCount: Object.keys(this.map).length });
-        } else {
-          console.warn('⚠️ [WORLD MOCK] gameLogger not available on window');
-        }
+        // Call the original to handle the unoccupiedGrids setup
+        // But first, preserve our mock map
+        const mockMap = this.map;
+        const mockWalkable = this.walkable;
+        const mockObjects = this.objects;
+        const mockMapBounds = this.mapBounds;
+        const mockStaticMap = this.staticMap;
+        const mockIslands = this.islands;
+        const mockMainIsland = this.mainIsland;
+        
+        // Call original which will set unoccupiedGrids
+        originalGenerateWorld.call(this);
+        
+        // Restore our mock data
+        this.map = mockMap;
+        this.walkable = mockWalkable;
+        this.objects = mockObjects;
+        this.mapBounds = mockMapBounds;
+        this.staticMap = mockStaticMap;
+        this.islands = mockIslands;
+        this.mainIsland = mockMainIsland;
         
         console.log('✅ [WORLD MOCK] Mock world generation complete');
       };
