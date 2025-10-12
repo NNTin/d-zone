@@ -3,10 +3,12 @@
  * @description Tests that validate world generation
  * 
  * This test suite verifies that:
- * 1. todo: Add description
+ * 1. Actors spawn on the world after initialization (critical - requires WebSocket)
+ * 2. Actors can be spawned on a mock world with mocked WebSocket communication (normal)
  */
 
 import { expect, test } from '@playwright/test';
+import { getMockWebSocketScript } from './mocks/apiHandlers.js';
 import { CanvasGameTestUtils, GameAssertions } from './utils/canvasTestUtils.js';
 import {
   extractSpawnAnalysisData,
@@ -16,7 +18,7 @@ import {
   type ActorCoordinates
 } from './utils/spawnValidationUtils.js';
 
-test.describe('World Generation', () => {
+test.describe('@critical World Generation', () => {
   let gameUtils: CanvasGameTestUtils;
 
   test.beforeEach(async ({ page }) => {
@@ -38,7 +40,6 @@ test.describe('World Generation', () => {
     // Get world data using utility
     const worldData = getWorldGenerationData(gameUtils);
     expect(worldData).toBeTruthy();
-    const { mapBounds } = worldData!;
     
     // Get spawn position analysis using utility
     const spawnAnalysisData = extractSpawnAnalysisData(getSpawnAnalysisLogs(gameUtils));
@@ -83,5 +84,66 @@ test.describe('World Generation', () => {
     }
     
     console.log(`✅ All ${spawnLogs.length} actors spawned with valid coordinates on the world`);
+  });
+
+  test('@normal should spawn 3 mock actors', async ({ page }) => {
+    console.log('🧪 Testing actor spawning on mock world with WebSocket mock');
+    
+    // Mock WebSocket BEFORE page loads to intercept the connection
+    console.log('🔌 Setting up WebSocket mock...');
+    await page.addInitScript(getMockWebSocketScript());
+    
+    console.log('🌐 Loading page with mocked WebSocket...');
+    await page.goto('/?e2e-test=true');
+    
+    // Verify canvas is visible
+    await GameAssertions.assertCanvasVisible(page);
+    
+    // Verify WebSocket was mocked
+    const isMocked = await page.evaluate(() => {
+      return (window as any).WebSocket.name === 'MockWebSocket';
+    });
+    console.log(`✓ WebSocket mocked: ${isMocked}`);
+    expect(isMocked).toBe(true);
+    
+    // Wait for game initialization
+    console.log('⏳ Waiting for game initialization...');
+    await gameUtils.waitForGameEvent('game', 'initialized', 15000);
+    console.log('✓ Game initialized');
+    
+    // Wait for world generation
+    console.log('⏳ Waiting for world generation...');
+    await gameUtils.waitForGameEvent('world', 'generated', 10000);
+    console.log('✓ World generated');
+    
+    // Get world data
+    const worldData = getWorldGenerationData(gameUtils);
+    expect(worldData).toBeTruthy();
+    console.log(`📊 World created with ${worldData!.totalTiles} tiles`);
+    
+    // Wait for actors to spawn from our mock data
+    console.log('⏳ Waiting for mock actors to spawn...');
+    await page.waitForTimeout(2000); // Give time for actors to be processed
+    
+    // Get spawned actors
+    const spawnLogs = getActorSpawnLogs(gameUtils);
+    console.log(`📊 Found ${spawnLogs.length} actor spawn(s) on the mock world`);
+    
+    // Verify we have the expected mock actors
+    expect(spawnLogs.length).toBeGreaterThanOrEqual(3);
+    
+    // Verify each mock actor spawned by username only (spawn positions are determined by the game)
+    const expectedActorNames = ['MockActor1', 'MockActor2', 'MockActor3'];
+    
+    for (const expectedName of expectedActorNames) {
+      const actorLog = spawnLogs.find(log => log.data.username === expectedName);
+      expect(actorLog).toBeTruthy();
+      
+      if (actorLog) {
+        console.log(`✓ Mock actor ${expectedName} (${actorLog.data.uid}) spawned at position (${actorLog.data.x}, ${actorLog.data.y}, ${actorLog.data.z})`);
+      }
+    }
+    
+    console.log(`✅ All ${expectedActorNames.length} mock actors spawned successfully on the mock world`);
   });
 });
