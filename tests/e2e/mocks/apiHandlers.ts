@@ -4,7 +4,7 @@
  */
 
 // Export world generation mock
-export { getMockWorldGenerationScript } from './worldGenerationMock.js';
+export { getMockWorldGenerationScript, MOCK_WORLDS, type MockWorldConfig } from './worldGenerationMock.js';
 
 /** 
  * Example:
