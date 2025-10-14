@@ -717,6 +717,11 @@ export default class World extends EventEmitter {
 // Expose World class for E2E testing as soon as it's defined
 if (typeof window !== 'undefined' && (window as any).__E2E_TEST_MODE) {
     (window as any).__WorldClass = World;
+    
+    // Expose unoccupiedGrids for testing and mocking
+    (window as any).__unoccupiedGrids = () => unoccupiedGrids;
+    (window as any).__setUnoccupiedGrids = (grids: string[]) => { unoccupiedGrids = grids; };
+    
     console.log('✅ [E2E] World class exposed on window.__WorldClass');
     
     // Dispatch event so mocks can patch immediately (synchronously)

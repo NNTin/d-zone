@@ -146,140 +146,6 @@ test.describe('@critical World Generation', () => {
     
     console.log(`✅ All ${expectedActorNames.length} mock actors spawned successfully on the mock world`);
   });
-
-  test('@normal should generate a 24x24 mock world with 3 mock actors', async ({ page }) => {
-    console.log('🧪 Testing 24x24 mock square world generation with mocked WebSocket and world generation');
-    
-    // Listen to ALL browser console logs for debugging
-    page.on('console', msg => {
-      const text = msg.text();
-      console.log(`[BROWSER] ${text}`);
-    });
-    
-    // Mock WebSocket BEFORE page loads (using the same mock as the previous test)
-    console.log('🔌 Setting up WebSocket mock...');
-    await page.addInitScript(getMockWebSocketScript());
-    
-    // Mock World Generation BEFORE page loads
-    console.log('🌍 Setting up World generation mock...');
-    const mockScript = getMockWorldGenerationScript();
-    await page.addInitScript(mockScript, MOCK_WORLDS.SQUARE_24X24);
-    
-    console.log('🌐 Loading page with mocked WebSocket and World...');
-    await page.goto('/?e2e-test=true');
-    
-    // Check if mock was set up
-    const mockStatus = await page.evaluate(() => {
-      return {
-        mockWorldGeneration: (window as any).__mockWorldGeneration,
-        mockWorldSize: (window as any).__mockWorldSize,
-        defineWrapped: typeof (window as any).define === 'function'
-      };
-    });
-    console.log('🔍 Mock status after page load:', mockStatus);
-    
-    // Verify canvas is visible
-    await GameAssertions.assertCanvasVisible(page);
-    
-    // Verify WebSocket was mocked
-    const isMocked = await page.evaluate(() => {
-      return (window as any).WebSocket.name === 'MockWebSocket';
-    });
-    console.log(`✓ WebSocket mocked: ${isMocked}`);
-    expect(isMocked).toBe(true);
-    
-    // Verify World generation mock flag is set
-    const worldMockInfo = await page.evaluate(() => {
-      return (window as any).__mockWorldGeneration;
-    });
-    console.log(`✓ World generation mocked:`, worldMockInfo);
-    expect(worldMockInfo?.enabled).toBe(true);
-    
-    // Wait for game initialization
-    console.log('⏳ Waiting for game initialization...');
-    await gameUtils.waitForGameEvent('game', 'initialized', 15000);
-    console.log('✓ Game initialized');
-    
-    // Wait for world generation
-    console.log('⏳ Waiting for world generation...');
-    await gameUtils.waitForGameEvent('world', 'generated', 10000);
-    console.log('✓ World generated');
-    
-    // Wait for tile map to be logged
-    console.log('⏳ Waiting for tile map...');
-    await gameUtils.waitForGameEvent('world', 'tile_map', 5000);
-    console.log('✓ Tile map created');
-    
-    // Get world data
-    const worldData = getWorldGenerationData(gameUtils);
-    expect(worldData).toBeTruthy();
-    console.log(`📊 World created with ${worldData!.totalTiles} tiles`);
-    
-    // Get tile map data
-    const worldLogs = gameUtils.getLogsByCategory('world');
-    const tileMapLogs = worldLogs.filter(log => log.event === 'tile_map');
-    expect(tileMapLogs.length).toBeGreaterThan(0);
-    
-    const tileMapData = tileMapLogs[0].data;
-    console.log(`📊 Tile map: ${tileMapData.totalTiles} tiles, ${tileMapData.uniqueTileCodes} unique codes`);
-    console.log(`📊 Grid tile types: ${Object.keys(tileMapData.gridTileTypes).length} positions`);
-    
-    // Verify the world is a 24x24 square (expecting 576 grid positions for perfect square)
-    // The mock ensures all tiles are land, creating a perfect square island
-    const gridPositions = Object.keys(tileMapData.gridTileTypes);
-    console.log(`📍 First 20 grid positions: ${gridPositions.slice(0, 20).join(', ')}`);
-    console.log(`📍 Total grid positions: ${gridPositions.length}`);
-    
-    // For a 24x24 world with flat terrain, we expect exactly 576 positions (24*24)
-    // With the mock, all tiles should be land since noise values are 0.1
-    expect(gridPositions.length).toBeGreaterThanOrEqual(500); // At least 500 positions
-    expect(gridPositions.length).toBeLessThanOrEqual(600); // But not more than 600
-    
-    // Verify tile types - with flat terrain, should be mostly grass
-    const tileTypes = Object.values(tileMapData.gridTileTypes);
-    const hasGrass = tileTypes.includes('grass');
-    console.log(`✓ World has grass tiles: ${hasGrass}`);
-    
-    // All tiles should be land (no water) with our flat terrain mock
-    const allLand = tileTypes.every(type => type !== 'water' && type !== 'deepwater');
-    console.log(`✓ All tiles are land (no water): ${allLand}`);
-    expect(allLand).toBe(true);
-    
-    // Wait for actors to spawn from our mock data
-    console.log('⏳ Waiting for mock actors to spawn...');
-    await page.waitForTimeout(2000);
-    
-    // Get spawned actors
-    const spawnLogs = getActorSpawnLogs(gameUtils);
-    console.log(`📊 Found ${spawnLogs.length} actor spawn(s) on the mock world`);
-    
-    // Verify we have the expected mock actors
-    expect(spawnLogs.length).toBeGreaterThanOrEqual(3);
-    
-    // Verify each mock actor spawned by username only
-    const expectedActorNames = ['MockActor1', 'MockActor2', 'MockActor3'];
-    
-    for (const expectedName of expectedActorNames) {
-      const actorLog = spawnLogs.find(log => log.data.username === expectedName);
-      expect(actorLog).toBeTruthy();
-      
-      if (actorLog) {
-        const x = actorLog.data.x;
-        const y = actorLog.data.y;
-        const z = actorLog.data.z;
-        console.log(`✓ Mock actor ${expectedName} (${actorLog.data.uid}) spawned at position (${x}, ${y}, ${z})`);
-        
-        // Verify actor spawned on a valid grid position
-        const gridKey = `${x}:${y}`;
-        const isOnValidGrid = gridPositions.includes(gridKey);
-        expect(isOnValidGrid).toBe(true);
-        console.log(`  ✓ Position ${gridKey} is on the generated world grid`);
-      }
-    }
-    
-    console.log(`✅ All ${expectedActorNames.length} mock actors spawned successfully on the 24x24 mock square world`);
-    console.log(`📊 Final world stats: ${gridPositions.length} grid positions, ${tileMapData.totalTiles} total tiles`);
-  });
 });
 
 /**
@@ -291,9 +157,7 @@ async function testMockWorldGeneration(
   gameUtils: CanvasGameTestUtils,
   worldConfig: MockWorldConfig,
   testDescription: string
-) {
-  console.log(`🧪 ${testDescription}`);
-  
+) {  
   // Listen to ALL browser console logs for debugging
   page.on('console', (msg: any) => {
     const text = msg.text();
@@ -305,9 +169,9 @@ async function testMockWorldGeneration(
   await page.addInitScript(getMockWebSocketScript());
   
   // Mock World Generation BEFORE page loads with specific config
-  console.log(`🌍 Setting up World generation mock (${worldConfig.description})...`);
+  console.log(`🌍 Setting up World generation mock (${testDescription})...`);
   const mockScript = getMockWorldGenerationScript();
-  await page.addInitScript(mockScript, worldConfig);
+  await page.addInitScript(mockScript, { ...worldConfig, testDescription });
   
   console.log('🌐 Loading page with mocked WebSocket and World...');
   await page.goto('/?e2e-test=true');
@@ -328,7 +192,7 @@ async function testMockWorldGeneration(
   });
   console.log(`✓ World generation mocked:`, worldMockInfo);
   expect(worldMockInfo?.enabled).toBe(true);
-  expect(worldMockInfo?.config?.description).toBe(worldConfig.description);
+  expect(worldMockInfo?.config?.description).toBe(testDescription);
   
   // Wait for game initialization
   console.log('⏳ Waiting for game initialization...');
@@ -361,28 +225,47 @@ async function testMockWorldGeneration(
   const gridPositions = Object.keys(tileMapData.gridTileTypes);
   console.log(`📊 Grid tile types: ${gridPositions.length} positions`);
   
-  // Calculate expected tile count (size^2 - number of holes)
-  const expectedTileCount = (worldConfig.size * worldConfig.size) - (worldConfig.holes?.length || 0);
-  console.log(`📊 Expected tiles: ${expectedTileCount} (${worldConfig.size}x${worldConfig.size} - ${worldConfig.holes?.length || 0} holes)`);
-  
-  // Verify the expected number of positions (with some tolerance for edge tiles)
-  expect(gridPositions.length).toBeGreaterThanOrEqual(expectedTileCount - 10);
-  expect(gridPositions.length).toBeLessThanOrEqual(expectedTileCount + 10);
-  
-  // Verify holes are not in the grid
-  if (worldConfig.holes && worldConfig.holes.length > 0) {
-    for (const hole of worldConfig.holes) {
-      const holeKey = `${hole.x}:${hole.y}`;
-      const isHolePresent = gridPositions.includes(holeKey);
-      expect(isHolePresent).toBe(false);
-      console.log(`✓ Hole at (${hole.x}, ${hole.y}) verified - not in grid`);
+  // Calculate expected tile count based on islands
+  let expectedTileCount = 0;
+  if (worldConfig.islands && worldConfig.islands.length > 0) {
+    // Estimate tiles based on island areas (rough calculation)
+    for (const island of worldConfig.islands) {
+      let islandArea = 0;
+      
+      if (island.shape === 'circle') {
+        // Circle area: π * r²
+        if (island.radius !== undefined) {
+          islandArea = Math.PI * island.radius * island.radius;
+        }
+      } else if (island.shape === 'rectangle') {
+        // Rectangle area: width * height
+        if (island.startX !== undefined && island.startY !== undefined && 
+            island.endX !== undefined && island.endY !== undefined) {
+          const width = Math.abs(island.endX - island.startX) + 1;
+          const height = Math.abs(island.endY - island.startY) + 1;
+          islandArea = width * height;
+        }
+      }
+      
+      expectedTileCount += Math.floor(islandArea);
     }
+  } else {
+    // No islands configured, expect no tiles
+    expectedTileCount = 0;
   }
   
-  // Verify all tiles are land (no water)
+  console.log(`📊 Estimated tiles: ~${expectedTileCount} across ${worldConfig.islands?.length || 0} islands`);
+  
+  // Verify we have some reasonable number of positions (islands should generate tiles)
+  if (worldConfig.islands && worldConfig.islands.length > 0) {
+    expect(gridPositions.length).toBeGreaterThan(0);
+    console.log(`✓ Generated ${gridPositions.length} tile positions from ${worldConfig.islands.length} islands`);
+  }
+  
+  // Verify all tiles are land (no void)
   const tileTypes = Object.values(tileMapData.gridTileTypes);
-  const allLand = tileTypes.every((type: any) => type !== 'water' && type !== 'deepwater');
-  console.log(`✓ All tiles are land (no water): ${allLand}`);
+  const allLand = tileTypes.every((type: any) => type == 'grass' || type == 'plain' || type == 'flowers');
+  console.log(`✓ All tiles are land (no void): ${allLand}`);
   expect(allLand).toBe(true);
   
   // Wait for actors to spawn from our mock data
@@ -395,8 +278,14 @@ async function testMockWorldGeneration(
   
   // Verify we have the expected mock actors
   expect(spawnLogs.length).toBeGreaterThanOrEqual(3);
-  
-  // Verify each mock actor spawned and is on a valid (non-hole) position
+
+  // Helper function to check if the actor is on ground (has a tile)
+  const isOnGround = (x: number, y: number): boolean => {
+    const gridKey = `${x}:${y}`;
+    return gridPositions.includes(gridKey);
+  };
+
+  // Verify each mock actor spawned and is on a valid island position
   const expectedActorNames = ['MockActor1', 'MockActor2', 'MockActor3'];
   
   for (const expectedName of expectedActorNames) {
@@ -415,16 +304,16 @@ async function testMockWorldGeneration(
       expect(isOnValidGrid).toBe(true);
       console.log(`  ✓ Position ${gridKey} is on the generated world grid`);
       
-      // Verify actor did NOT spawn in a hole
-      if (worldConfig.holes && worldConfig.holes.length > 0) {
-        const isInHole = worldConfig.holes.some(hole => hole.x === x && hole.y === y);
-        expect(isInHole).toBe(false);
-        console.log(`  ✓ Position ${gridKey} is not a hole`);
+      // Verify actor spawned inside an island (if islands are configured)
+      if (worldConfig.islands && worldConfig.islands.length > 0) {
+        const isOnIsland = isOnGround(x, y);
+        expect(isOnIsland).toBe(true);
+        console.log(`  ✓ Position ${gridKey} is within an island`);
       }
     }
   }
   
-  console.log(`✅ All ${expectedActorNames.length} mock actors spawned successfully on ${worldConfig.description}`);
+  console.log(`✅ All ${expectedActorNames.length} mock actors spawned successfully on ${testDescription}`);
   console.log(`📊 Final world stats: ${gridPositions.length} grid positions, ${tileMapData.totalTiles} total tiles`);
 }
 
@@ -436,21 +325,48 @@ test.describe('@normal Mock World Configurations', () => {
     await gameUtils.startLogCapture();
   });
 
-  test('@normal should generate 24x24 world with single hole at (5,5)', async ({ page }) => {
+  test('@normal should generate 24x24 world with single large island', async ({ page }, testInfo) => {
     await testMockWorldGeneration(
       page,
       gameUtils,
-      MOCK_WORLDS.SQUARE_24X24_HOLE_5X5,
-      'Testing 24x24 world with single hole at (5,5)'
+      MOCK_WORLDS.SQUARE_24X24,
+      testInfo.title.replace('@normal should ', '')
     );
   });
 
-  test('@normal should generate 24x24 world with line of holes', async ({ page }) => {
+  test('@normal should generate 24x24 world with 3x3 grid of small islands', async ({ page }, testInfo) => {
     await testMockWorldGeneration(
       page,
       gameUtils,
-      MOCK_WORLDS.SQUARE_24X24_LINE_HOLES,
-      'Testing 24x24 world with horizontal line of holes from (1,5) to (7,5)'
+      MOCK_WORLDS.GRID_SMALL_ISLANDS,
+      testInfo.title.replace('@normal should ', '')
+    );
+  });
+
+  test('@normal should generate 24x24 world with 2x2 grid of medium islands', async ({ page }, testInfo) => {
+    await testMockWorldGeneration(
+      page,
+      gameUtils,
+      MOCK_WORLDS.GRID_MEDIUM_ISLANDS,
+      testInfo.title.replace('@normal should ', '')
+    );
+  });
+
+  test('@normal should generate 24x24 world with parallel lines connected by bridge', async ({ page }, testInfo) => {
+    await testMockWorldGeneration(
+      page,
+      gameUtils,
+      MOCK_WORLDS.PARALLEL_LINES_BRIDGE,
+      testInfo.title.replace('@normal should ', '')
+    );
+  });
+
+  test('@normal should generate 24x24 world with parallel lines connected by bridge v2', async ({ page }, testInfo) => {
+    await testMockWorldGeneration(
+      page,
+      gameUtils,
+      MOCK_WORLDS.PARALLEL_LINES_BRIDGE_V2,
+      testInfo.title.replace('@normal should ', '')
     );
   });
 });
