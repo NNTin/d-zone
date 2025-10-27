@@ -12,8 +12,11 @@
 
 // Export all actor-related functionality
 export {
-    generateCustomMockActors, generateDefaultMockActors, type MockActor,
-    type MockServerConfig
+    generateCustomMockActors,
+    generateDefaultMockActors,
+    getMockActorPositioningScript,
+    type MockActor, type MockActorPosition,
+    type MockActorPositioning, type MockServerConfig
 } from './actorMock.js';
 
 // Export all WebSocket-related functionality  

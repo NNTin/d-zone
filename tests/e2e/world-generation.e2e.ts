@@ -11,10 +11,12 @@ import { expect, test } from '@playwright/test';
 import {
   generateCustomMockActors,
   generateDefaultMockActors,
+  getMockActorPositioningScript,
   getMockWebSocketScript,
   getMockWebSocketScriptWithActors,
   getMockWorldGenerationScript,
   MOCK_WORLDS,
+  MockActorPositioning,
   MockWorldConfig
 } from './mocks/index';
 import { CanvasGameTestUtils, GameAssertions } from './utils/canvasTestUtils.js';
@@ -506,5 +508,157 @@ test.describe('@normal Configurable Mock Actors', () => {
     expect(actualUsernames).toEqual(expectedUsernames);
     
     console.log(`✅ Successfully spawned ${actorCount} actors with unique positions and correct naming`);
+  });
+
+  test('@normal should spawn actors at custom fixed positions', async ({ page }, testInfo) => {
+    const customActors = generateCustomMockActors(['Hero', 'Mage', 'Warrior']);
+    const testDescription = testInfo.title.replace('@normal should ', '');
+    
+    // Define specific positions for each actor
+    const positioning: MockActorPositioning = {
+      fixedPositions: [
+        { uid: 'mock-user-1', x: 5, y: 3, z: 0 },   // Hero
+        { uid: 'mock-user-2', x: -2, y: 7, z: 0 },  // Mage
+        { uid: 'mock-user-3', x: 8, y: -5, z: 0 }   // Warrior
+      ]
+    };
+    
+    console.log('🎯 Setting up custom positioning test...');
+    console.log('📍 Fixed positions:', positioning.fixedPositions);
+    
+    // Set up world generation mock
+    await page.addInitScript(getMockWorldGenerationScript(), {
+      ...MOCK_WORLDS.SQUARE_24X24,
+      testDescription
+    });
+    
+    // Set up actor positioning mock
+    await page.addInitScript(getMockActorPositioningScript(), positioning);
+    
+    // Set up WebSocket mock with custom actors
+    await page.addInitScript(getMockWebSocketScriptWithActors(), {
+      serverId: 'positioning-test',
+      serverName: 'Custom Positioning Test Server',
+      actors: customActors
+    });
+    
+    // Navigate to the game
+    await page.goto('/?e2e-test=true');
+    
+    // Verify mocks are set up
+    const mockInfo = await page.evaluate(() => ({
+      positioning: (window as any).__mockActorPositioning?.enabled || false,
+      websocket: !!(window as any).__mockWebSocket || ((window as any).WebSocket?.name === 'MockWebSocket'),
+      world: (window as any).__mockWorldGeneration || false
+    }));
+    
+    console.log('✓ Mock setup verified:', mockInfo);
+    
+    // Wait for game initialization
+    await gameUtils.waitForGameEvent('game', 'initialized', 15000);
+    await gameUtils.waitForGameEvent('world', 'generated', 10000);
+    
+    // Wait for actors to spawn
+    console.log('⏳ Waiting for actors to spawn at custom positions...');
+    await page.waitForTimeout(3000);
+    
+    // Get spawned actors
+    const spawnLogs = getActorSpawnLogs(gameUtils);
+    console.log(`📊 Found ${spawnLogs.length} actor spawn(s)`);
+    
+    // Verify all actors spawned
+    expect(spawnLogs.length).toBe(customActors.length);
+    
+    // Verify each actor spawned at the exact expected position
+    for (let i = 0; i < customActors.length; i++) {
+      const expectedActor = customActors[i];
+      const expectedPosition = positioning.fixedPositions![i];
+      
+      const actorLog = spawnLogs.find(log => log.data.username === expectedActor.username);
+      expect(actorLog).toBeTruthy();
+      
+      if (actorLog) {
+        console.log(`✓ Actor ${expectedActor.username} spawned`);
+        
+        // Verify exact position match
+        expect(actorLog.data.x).toBe(expectedPosition.x);
+        expect(actorLog.data.y).toBe(expectedPosition.y);
+        expect(actorLog.data.z).toBe(expectedPosition.z || 0);
+        
+        console.log(`  ✅ Position matches exactly: (${actorLog.data.x}, ${actorLog.data.y}, ${actorLog.data.z}) = (${expectedPosition.x}, ${expectedPosition.y}, ${expectedPosition.z || 0})`);
+      }
+    }
+    
+    console.log(`✅ All ${customActors.length} actors spawned at exact custom positions!`);
+  });
+
+  test('@normal should cycle through custom spawn points', async ({ page }, testInfo) => {
+    const customActors = generateDefaultMockActors(4);
+    const testDescription = testInfo.title.replace('@normal should ', '');
+    
+    // Define custom spawn points to cycle through
+    const positioning: MockActorPositioning = {
+      customSpawnPoints: [
+        { x: 1, y: 1, z: 0 },
+        { x: 3, y: 3, z: 0 },
+        { x: 5, y: 5, z: 0 }
+      ],
+      useRandomForUnspecified: false
+    };
+    
+    console.log('🎯 Setting up spawn point cycling test...');
+    console.log('📍 Custom spawn points:', positioning.customSpawnPoints);
+    
+    // Set up mocks
+    await page.addInitScript(getMockWorldGenerationScript(), {
+      ...MOCK_WORLDS.SQUARE_24X24,
+      testDescription
+    });
+    
+    await page.addInitScript(getMockActorPositioningScript(), positioning);
+    
+    await page.addInitScript(getMockWebSocketScriptWithActors(), {
+      serverId: 'cycling-test',
+      serverName: 'Spawn Point Cycling Test',
+      actors: customActors
+    });
+    
+    // Navigate to the game
+    await page.goto('/?e2e-test=true');
+    
+    // Wait for game initialization
+    await gameUtils.waitForGameEvent('game', 'initialized', 15000);
+    await gameUtils.waitForGameEvent('world', 'generated', 10000);
+    
+    // Wait for actors to spawn
+    console.log('⏳ Waiting for actors to spawn at cycling positions...');
+    await page.waitForTimeout(3000);
+    
+    // Get spawned actors
+    const spawnLogs = getActorSpawnLogs(gameUtils);
+    console.log(`📊 Found ${spawnLogs.length} actor spawn(s)`);
+    
+    // Verify all actors spawned
+    expect(spawnLogs.length).toBe(customActors.length);
+    
+    // Sort actors by uid to ensure consistent order
+    const sortedLogs = spawnLogs.sort((a, b) => a.data.uid.localeCompare(b.data.uid));
+    
+    // Verify each actor uses the expected spawn point (cycling through the list)
+    for (let i = 0; i < sortedLogs.length; i++) {
+      const actorLog = sortedLogs[i];
+      const expectedSpawnPoint = positioning.customSpawnPoints![i % positioning.customSpawnPoints!.length];
+      
+      console.log(`✓ Actor ${actorLog.data.username} spawned at (${actorLog.data.x}, ${actorLog.data.y}, ${actorLog.data.z})`);
+      
+      // Verify position matches expected spawn point
+      expect(actorLog.data.x).toBe(expectedSpawnPoint.x);
+      expect(actorLog.data.y).toBe(expectedSpawnPoint.y);
+      expect(actorLog.data.z).toBe(expectedSpawnPoint.z || 0);
+      
+      console.log(`  ✅ Matches spawn point ${i % positioning.customSpawnPoints!.length}: (${expectedSpawnPoint.x}, ${expectedSpawnPoint.y}, ${expectedSpawnPoint.z || 0})`);
+    }
+    
+    console.log(`✅ All ${customActors.length} actors correctly cycled through ${positioning.customSpawnPoints!.length} spawn points!`);
   });
 });
