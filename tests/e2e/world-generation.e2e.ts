@@ -16,7 +16,7 @@ import {
   getMockWorldGenerationScript,
   MOCK_WORLDS,
   MockWorldConfig
-} from './mocks/apiHandlers';
+} from './mocks/index';
 import { CanvasGameTestUtils, GameAssertions } from './utils/canvasTestUtils.js';
 import {
   extractSpawnAnalysisData,

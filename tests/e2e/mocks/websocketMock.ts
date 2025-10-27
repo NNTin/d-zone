@@ -1,65 +1,21 @@
 /**
- * MSW (Mock Service Worker) handlers for API mocking
- * Used primarily in E2E tests
+ * WebSocket Mock for E2E Tests
+ * 
+ * This module provides WebSocket mocking functionality for testing actor spawning
+ * and server communication without requiring actual WebSocket connections.
  */
 
-// Export world generation mock
-export { getMockWorldGenerationScript, MOCK_WORLDS, type MockWorldConfig } from './worldGenerationMock.js';
-
-/**
- * Configuration for a mock actor
- */
-export interface MockActor {
-  uid: string;
-  username: string;
-  roleColor: string;
-  presence?: string;
-  preferredSpawnArea?: {
-    x: number;
-    y: number;
-    radius?: number; // Optional radius for spawn area preference
-  };
-}
-
-/**
- * Configuration for mock server with configurable actors
- */
-export interface MockServerConfig {
-  serverId?: string;
-  serverName?: string;
-  actors: MockActor[];
-}
-
-/**
- * Generate default mock actors with sequential naming
- */
-export function generateDefaultMockActors(count: number): MockActor[] {
-  const colors = ['#FF5733', '#33FF57', '#3357FF', '#FF33F5', '#33FFF5', '#F5FF33', '#FF8333', '#8333FF', '#33FF83', '#F533FF'];
-  
-  return Array.from({ length: count }, (_, i) => ({
-    uid: `mock-user-${i + 1}`,
-    username: `MockActor${i + 1}`,
-    roleColor: colors[i % colors.length],
-    presence: 'online'
-  }));
-}
-
-/**
- * Generate mock actors with custom usernames
- */
-export function generateCustomMockActors(usernames: string[]): MockActor[] {
-  const colors = ['#FF5733', '#33FF57', '#3357FF', '#FF33F5', '#33FFF5', '#F5FF33', '#FF8333', '#8333FF', '#33FF83', '#F533FF'];
-  
-  return usernames.map((username, i) => ({
-    uid: `mock-user-${i + 1}`,
-    username: username,
-    roleColor: colors[i % colors.length],
-    presence: 'online'
-  }));
-}
+import type { MockServerConfig } from './actorMock.js';
 
 /** 
- * Example:
+ * Creates a basic WebSocket mock with 3 hardcoded actors
+ * 
+ * This function returns an initialization script that replaces the global WebSocket
+ * with a mock implementation that simulates server communication and actor spawning.
+ * 
+ * @returns Function to be used with page.addInitScript()
+ * 
+ * @example
  * ```typescript
  * await page.addInitScript(getMockWebSocketScript());
  * ```
@@ -199,8 +155,14 @@ export function getMockWebSocketScript() {
 }
 
 /**
- * Configurable WebSocket mock that allows custom actors
- * Example:
+ * Creates a configurable WebSocket mock that allows custom actors
+ * 
+ * This function returns an initialization script that creates a mock WebSocket
+ * with a configurable set of actors, allowing for flexible testing scenarios.
+ * 
+ * @returns Function to be used with page.addInitScript() that accepts MockServerConfig
+ * 
+ * @example
  * ```typescript
  * const config = {
  *   actors: [
