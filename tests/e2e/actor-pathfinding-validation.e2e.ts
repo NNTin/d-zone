@@ -439,6 +439,22 @@ test.describe('@normal Actor Pathfinding Validation', () => {
     console.log(`✅ PathfinderBot successfully moved toward MessageSender through message-triggered pathfinding`);
     console.log(`📊 Message-triggered pathfinding validation complete - GoTo behavior verified`);
     
+    // Print browser logs if there were any errors or warnings
+    const browserErrors = gameUtils.getBrowserErrors();
+    if (browserErrors.length > 0) {
+      console.log('\n🚨 Browser Errors Found:');
+      gameUtils.printBrowserErrors();
+    }
+    
+    const browserLogs = gameUtils.getBrowserLogs();
+    const warnings = browserLogs.filter(log => log.type === 'warning');
+    if (warnings.length > 0) {
+      console.log('\n⚠️ Browser Warnings:');
+      warnings.forEach(log => {
+        console.log(`    [${log.type}] ${log.text} (${log.location})`);
+      });
+    }
+    
     // Verify world generation data for context
     const worldData = getWorldGenerationData(gameUtils);
     if (worldData) {
