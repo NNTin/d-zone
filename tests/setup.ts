@@ -3,8 +3,8 @@
  * Runs before all test files
  */
 
-import { beforeAll, beforeEach } from 'vitest';
-import { setupGlobalMocks } from './mocks/browserMocks';
+import { beforeAll, beforeEach, vi } from 'vitest';
+import { setupGlobalMocks } from './unit/mocks/browserMocks';
 
 // Setup global mocks for all tests
 beforeAll(() => {
@@ -14,7 +14,5 @@ beforeAll(() => {
 // Reset mocks between tests
 beforeEach(() => {
   // Clear any module mocks between tests
-  if (typeof vi !== 'undefined') {
-    vi.clearAllMocks();
-  }
+  vi.clearAllMocks();
 });

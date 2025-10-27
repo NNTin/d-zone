@@ -149,3 +149,8 @@ export default class GoTo {
         delete this.target;
     }
 }
+
+// Export to window for E2E testing
+if (typeof window !== 'undefined') {
+    (window as any).GoTo = GoTo;
+}

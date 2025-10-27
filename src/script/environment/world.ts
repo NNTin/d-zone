@@ -99,7 +99,19 @@ export default class World extends EventEmitter {
             TileClass = TileModule.default;
             TileSheetClass = TileSheetModule.default;
             PathfinderClass = PathfinderModule.default;
-            this.generateWorld();
+            
+            // Expose classes for E2E testing
+            if (typeof window !== 'undefined' && (window as any).__E2E_TEST_MODE) {
+                (window as any).__WorldDependencies = {
+                    Slab: SlabClass,
+                    Tile: TileClass,
+                    TileSheet: TileSheetClass,
+                    Pathfinder: PathfinderClass
+                };
+                console.log('✅ [E2E] World dependencies exposed');
+            }
+            
+            // Note: generateWorld() is now called explicitly from main.ts after init completes
         } catch (error) {
             gameLogger.error('World: Failed to load world dependencies', {
                 error: error instanceof Error ? error.message : String(error),
@@ -110,7 +122,7 @@ export default class World extends EventEmitter {
         }
     }
 
-    private generateWorld(): void {
+    generateWorld(): void {
         geometry.generateClosestGrids(this.worldSize);
         
         testCanvas.clear();
@@ -472,8 +484,60 @@ export default class World extends EventEmitter {
         }
         this.staticMap.sort(function(a, b) { return a.zDepth - b.zDepth; });
         
+        // Log tile map for E2E testing
+        this.logTileMap();
+        
         // Log valid spawn positions for E2E testing
         this.logValidSpawnPositions();
+    }
+
+    private logTileMap(): void {
+        // Create complete tile map data for E2E testing
+        const completeTileMap: Record<string, { 
+            tileCode: string; 
+            x: number; 
+            y: number; 
+            z: number;
+            grid: string;
+        }> = {};
+        
+        const tileCodeCounts: Record<string, number> = {};
+        
+        for (const tileGrid in this.tileMap) {
+            if (!this.tileMap.hasOwnProperty(tileGrid)) continue;
+            
+            const tile = this.tileMap[tileGrid] as any; // Access the generated tile data
+            const tileCode = tile.tileCode || 'UNKNOWN';
+            const position = tile.position;
+            
+            // Store complete tile information
+            completeTileMap[tileGrid] = {
+                tileCode: tileCode,
+                x: position.x,
+                y: position.y,
+                z: position.z,
+                grid: tileGrid
+            };
+            
+            // Count tile codes for summary
+            tileCodeCounts[tileCode] = (tileCodeCounts[tileCode] || 0) + 1;
+        }
+        
+        // Also create a simple grid-based representation showing what tile type is at each coordinate
+        const gridTileTypes: Record<string, string> = {};
+        for (const gridKey in this.map) {
+            if (!this.map.hasOwnProperty(gridKey)) continue;
+            const slab = this.map[gridKey];
+            gridTileTypes[gridKey] = slab.style; // grass, plain, or flowers
+        }
+        
+        gameLogger.worldTileMap({
+            totalTiles: Object.keys(this.tileMap).length,
+            uniqueTileCodes: Object.keys(tileCodeCounts).length,
+            tilesByCode: tileCodeCounts,
+            gridTileTypes: gridTileTypes, // Map of "x:y" -> "grass"|"plain"|"flowers"
+            tileMap: completeTileMap // Complete tile map: "z:x:y" -> { tileCode, x, y, z, grid }
+        });
     }
 
     private logValidSpawnPositions(): void {
@@ -647,5 +711,21 @@ export default class World extends EventEmitter {
             }
         }
         return null;
+    }
+}
+
+// Expose World class for E2E testing as soon as it's defined
+if (typeof window !== 'undefined' && (window as any).__E2E_TEST_MODE) {
+    (window as any).__WorldClass = World;
+    
+    // Expose unoccupiedGrids for testing and mocking
+    (window as any).__unoccupiedGrids = () => unoccupiedGrids;
+    (window as any).__setUnoccupiedGrids = (grids: string[]) => { unoccupiedGrids = grids; };
+    
+    console.log('✅ [E2E] World class exposed on window.__WorldClass');
+    
+    // Dispatch event so mocks can patch immediately (synchronously)
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('__worldClassReady', { detail: { World } }));
     }
 }
