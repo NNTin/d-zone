@@ -106,7 +106,8 @@ export default class World extends EventEmitter {
                     Slab: SlabClass,
                     Tile: TileClass,
                     TileSheet: TileSheetClass,
-                    Pathfinder: PathfinderClass
+                    Pathfinder: PathfinderClass,
+                    geometry: geometry
                 };
                 console.log('✅ [E2E] World dependencies exposed');
             }
