@@ -58,6 +58,7 @@ export class CanvasGameTestUtils {
         // Look for structured game logs (JSON format)
         if (text.startsWith('[GAME_LOG]')) {
           const pinoLogData = JSON.parse(text.replace('[GAME_LOG]', '').trim());
+          
           // Extract the actual log data from pino's structure
           // pino logs have this structure: { ts, messages: [data, message], bindings, level }
           const messages = pinoLogData.messages || [];
@@ -66,9 +67,35 @@ export class CanvasGameTestUtils {
             if (logData.category && logData.event) {
               // Extract category and event, everything else goes in data
               const { category, event, timestamp, ...data } = logData;
+              
+              // Extract log level from the pino log structure
+              // The pino log level can be extracted from the log event or default to 'info'
+              let level = 'info';
+              if (pinoLogData.level !== undefined) {
+                if (typeof pinoLogData.level === 'object' && pinoLogData.level.label) {
+                  // Pino level object with label property
+                  level = pinoLogData.level.label;
+                } else if (typeof pinoLogData.level === 'number') {
+                  // Map pino level numbers to level names
+                  // 10: trace, 20: debug, 30: info, 40: warn, 50: error, 60: fatal
+                  const levelMap: { [key: number]: string } = {
+                    10: 'trace',
+                    20: 'debug', 
+                    30: 'info',
+                    40: 'warn',
+                    50: 'error',
+                    60: 'fatal'
+                  };
+                  level = levelMap[pinoLogData.level] || 'info';
+                } else if (typeof pinoLogData.level === 'string') {
+                  // Direct string level
+                  level = pinoLogData.level;
+                }
+              }
+              
               this.logs.push({
                 timestamp: Date.now(),
-                level: 'info',
+                level: level as 'info' | 'debug' | 'warn' | 'error',
                 category,
                 event,
                 data

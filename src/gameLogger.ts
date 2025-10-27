@@ -224,6 +224,24 @@ class GameLogger {
   }
 
   /**
+   * Actor goto command issued
+   */
+  actorGoto(data: {
+    uid?: string;
+    username: string;
+    targetX: number;
+    targetY: number;
+  }): void {
+    if (!this.enabled) return;
+    this.baseLogger.debug({
+      category: 'actor',
+      event: 'goto',
+      timestamp: Date.now(),
+      ...data
+    }, `Actor goto command: ${data.username} -> (${data.targetX}, ${data.targetY})`);
+  }
+
+  /**
    * Actor removed from world
    */
   actorRemoved(data: { uid: string; username?: string }): void {

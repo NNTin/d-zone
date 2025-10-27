@@ -187,6 +187,9 @@ export function getMockWebSocketScriptWithActors() {
       constructor(url: string) {
         console.log('🔌 [MOCK WS] MockWebSocket constructor called for URL:', url);
         
+        // Store reference to this WebSocket instance globally for test access
+        (window as any).__mockWebSocket = this;
+        
         // Simulate connection opening
         setTimeout(() => {
           console.log('✓ [MOCK WS] Triggering open event');
@@ -295,10 +298,29 @@ export function getMockWebSocketScriptWithActors() {
           }
         });
       }
+      
+      // Public method to simulate incoming messages from tests
+      public simulateIncomingMessage(data: any) {
+        console.log('📨 [MOCK WS] Simulating incoming message:', data);
+        this.triggerMessage(data);
+      }
     }
     
     // Replace the global WebSocket with our mock
     (window as any).WebSocket = MockWebSocket;
-    console.log('✓ [INIT SCRIPT] WebSocket replaced with MockWebSocket');
+    
+    // Add global helper function for tests to send mock messages
+    (window as any).__simulateWebSocketMessage = function(messageData: any) {
+      const mockWS = (window as any).__mockWebSocket;
+      if (mockWS && mockWS.simulateIncomingMessage) {
+        mockWS.simulateIncomingMessage(messageData);
+        return true;
+      } else {
+        console.error('❌ [MOCK WS] No MockWebSocket instance available for message simulation');
+        return false;
+      }
+    };
+    
+    console.log('✓ [INIT SCRIPT] WebSocket replaced with MockWebSocket and message simulation enabled');
   };
 }
