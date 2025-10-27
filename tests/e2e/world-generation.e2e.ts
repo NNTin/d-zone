@@ -8,7 +8,15 @@
  */
 
 import { expect, test } from '@playwright/test';
-import { getMockWebSocketScript, getMockWorldGenerationScript, MOCK_WORLDS, type MockWorldConfig } from './mocks/apiHandlers.js';
+import {
+  generateCustomMockActors,
+  generateDefaultMockActors,
+  getMockWebSocketScript,
+  getMockWebSocketScriptWithActors,
+  getMockWorldGenerationScript,
+  MOCK_WORLDS,
+  MockWorldConfig
+} from './mocks/apiHandlers';
 import { CanvasGameTestUtils, GameAssertions } from './utils/canvasTestUtils.js';
 import {
   extractSpawnAnalysisData,
@@ -368,5 +376,135 @@ test.describe('@normal Mock World Configurations', () => {
       MOCK_WORLDS.PARALLEL_LINES_BRIDGE_V2,
       testInfo.title.replace('@normal should ', '')
     );
+  });
+});
+
+test.describe('@normal Configurable Mock Actors', () => {
+  let gameUtils: CanvasGameTestUtils;
+
+  test.beforeEach(async ({ page }) => {
+    gameUtils = new CanvasGameTestUtils(page);
+    await gameUtils.startLogCapture();
+  });
+
+  test('@normal should spawn custom configured actors on mock world', async ({ page }, testInfo) => {
+    const customActors = generateCustomMockActors(['Alice', 'Bob', 'Charlie', 'Diana']);
+    const testDescription = testInfo.title.replace('@normal should ', '');
+    
+    console.log('🎭 Setting up custom mock actors test...');
+    console.log(`🎯 Configured actors: ${customActors.map(a => a.username).join(', ')}`);
+    
+    // Set up world generation mock
+    await page.addInitScript(getMockWorldGenerationScript(), {
+      ...MOCK_WORLDS.SQUARE_24X24,
+      testDescription
+    });
+    
+    // Set up WebSocket mock with custom actors
+    await page.addInitScript(getMockWebSocketScriptWithActors(), {
+      serverId: 'custom-test',
+      serverName: 'Custom Actor Test Server',
+      actors: customActors
+    });
+    
+    // Navigate to the game
+    await page.goto('/?e2e-test=true');
+    
+    // Verify both mocks are set up
+    const mockInfo = await page.evaluate(() => ({
+      websocket: (window as any).__mockWebSocket || false,
+      world: (window as any).__mockWorldGeneration || false
+    }));
+    
+    console.log('✓ Mock setup verified:', mockInfo);
+    
+    // Wait for game initialization
+    await gameUtils.waitForGameEvent('game', 'initialized', 15000);
+    await gameUtils.waitForGameEvent('world', 'generated', 10000);
+    
+    // Wait for actors to spawn
+    console.log('⏳ Waiting for custom actors to spawn...');
+    await page.waitForTimeout(3000);
+    
+    // Get spawned actors
+    const spawnLogs = getActorSpawnLogs(gameUtils);
+    console.log(`📊 Found ${spawnLogs.length} actor spawn(s) on the custom world`);
+    
+    // Verify all custom actors spawned
+    expect(spawnLogs.length).toBe(customActors.length);
+    
+    // Verify each custom actor spawned with correct username
+    for (const expectedActor of customActors) {
+      const actorLog = spawnLogs.find(log => log.data.username === expectedActor.username);
+      expect(actorLog).toBeTruthy();
+      
+      if (actorLog) {
+        console.log(`✓ Custom actor ${expectedActor.username} (${actorLog.data.uid}) spawned at position (${actorLog.data.x}, ${actorLog.data.y}, ${actorLog.data.z})`);
+        
+        // Verify actor spawned on valid world position
+        const worldData = getWorldGenerationData(gameUtils);
+        expect(worldData).toBeTruthy();
+        
+        // Check spawn position is within world bounds
+        const { x, y } = actorLog.data;
+        expect(x).toBeGreaterThanOrEqual(worldData!.mapBounds.xl);
+        expect(x).toBeLessThanOrEqual(worldData!.mapBounds.xh);
+        expect(y).toBeGreaterThanOrEqual(worldData!.mapBounds.yl);
+        expect(y).toBeLessThanOrEqual(worldData!.mapBounds.yh);
+      }
+    }
+    
+    console.log(`✅ All ${customActors.length} custom actors spawned successfully: ${customActors.map(a => a.username).join(', ')}`);
+  });
+
+  test('@normal should spawn variable number of actors', async ({ page }, testInfo) => {
+    const actorCount = 6;
+    const defaultActors = generateDefaultMockActors(actorCount);
+    const testDescription = testInfo.title.replace('@normal should ', '');
+    
+    console.log(`🎭 Setting up ${actorCount} default mock actors test...`);
+    
+    // Set up world generation mock
+    await page.addInitScript(getMockWorldGenerationScript(), {
+      ...MOCK_WORLDS.GRID_MEDIUM_ISLANDS,
+      testDescription
+    });
+    
+    // Set up WebSocket mock with variable number of actors
+    await page.addInitScript(getMockWebSocketScriptWithActors(), {
+      serverId: 'variable-test',
+      serverName: 'Variable Actor Count Test',
+      actors: defaultActors
+    });
+    
+    // Navigate to the game
+    await page.goto('/?e2e-test=true');
+    
+    // Wait for game initialization
+    await gameUtils.waitForGameEvent('game', 'initialized', 15000);
+    await gameUtils.waitForGameEvent('world', 'generated', 10000);
+    
+    // Wait for actors to spawn
+    console.log(`⏳ Waiting for ${actorCount} actors to spawn...`);
+    await page.waitForTimeout(3000);
+    
+    // Get spawned actors
+    const spawnLogs = getActorSpawnLogs(gameUtils);
+    console.log(`📊 Found ${spawnLogs.length} actor spawn(s) on the world`);
+    
+    // Verify correct number of actors spawned
+    expect(spawnLogs.length).toBe(actorCount);
+    
+    // Verify all actors have unique positions
+    const positions = spawnLogs.map(log => `${log.data.x}:${log.data.y}`);
+    const uniquePositions = new Set(positions);
+    expect(uniquePositions.size).toBe(spawnLogs.length);
+    
+    // Verify all actors have sequential naming
+    const expectedUsernames = defaultActors.map(a => a.username).sort();
+    const actualUsernames = spawnLogs.map(log => log.data.username).sort();
+    expect(actualUsernames).toEqual(expectedUsernames);
+    
+    console.log(`✅ Successfully spawned ${actorCount} actors with unique positions and correct naming`);
   });
 });
