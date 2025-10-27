@@ -18,6 +18,7 @@ import pino from 'pino';
 const isProduction = typeof process !== 'undefined' && process.env.NODE_ENV === 'production';
 const isTesting = typeof process !== 'undefined' && (process.env.NODE_ENV === 'test' || process.env.CI === 'true');
 const isE2ETesting = typeof window !== 'undefined' && window.location.search.includes('e2e-test=true');
+const isDebugMode = typeof window !== 'undefined' && window.location.search.includes('debug=true');
 
 // Logger configuration
 const logger = pino({
@@ -27,8 +28,8 @@ const logger = pino({
     transmit: {
       level: 'debug',
       send: function (level, logEvent) {
-        // In browser, emit structured logs for E2E test capture
-        if (typeof window !== 'undefined' && (isTesting || isE2ETesting)) {
+        // In browser, emit structured logs for E2E test capture or debug mode
+        if (typeof window !== 'undefined' && (isTesting || isE2ETesting || isDebugMode)) {
           console.log(`[GAME_LOG] ${JSON.stringify(logEvent)}`);
         }
       }
@@ -61,6 +62,13 @@ class GameLogger {
    */
   isEnabled(): boolean {
     return this.enabled;
+  }
+
+  /**
+   * Check if debug mode is enabled
+   */
+  isDebugMode(): boolean {
+    return isDebugMode;
   }
 
   // ===========================================
@@ -683,14 +691,23 @@ class GameLogger {
 // Create and export the game logger instance
 export const gameLogger = new GameLogger(logger);
 
-// Expose gameLogger on window for E2E tests
-if (typeof window !== 'undefined' && (window as any).__E2E_TEST_MODE) {
+// Expose gameLogger on window for E2E tests and debug mode
+if (typeof window !== 'undefined' && ((window as any).__E2E_TEST_MODE || isDebugMode)) {
   (window as any).gameLogger = gameLogger;
-  console.log('✅ [E2E] gameLogger exposed on window.gameLogger');
+  console.log('✅ [DEBUG/E2E] gameLogger exposed on window.gameLogger');
+}
+
+// Expose debug mode flag for easy access
+if (typeof window !== 'undefined' && isDebugMode) {
+  (window as any).__DEBUG_MODE = true;
+  console.log('🐛 [DEBUG] Debug mode enabled - walkable tiles will be highlighted');
 }
 
 // Export the base logger for special cases
 export { logger as baseLogger };
+
+// Export debug mode flag
+  export { isDebugMode };
 
 // Export types for TypeScript support
     export type {

@@ -169,6 +169,11 @@ export default class World extends EventEmitter {
         
         this.createBackground();
         
+        // Add debug overlay if debug mode is enabled
+        if (gameLogger.isDebugMode()) {
+            this.createDebugOverlay();
+        }
+        
         PathfinderClass.loadMap(this.walkable);
         unoccupiedGrids = Object.keys(this.map);
         const beaconIndex = unoccupiedGrids.indexOf('0:0');
@@ -289,6 +294,77 @@ export default class World extends EventEmitter {
         this.game.renderer.bgCanvas = {
             x: lowestScreenX, y: lowestScreenY, image: bgCanvas.canvas
         };
+    }
+
+    private createDebugOverlay(): void {
+        if (!this.game.renderer.bgCanvas) {
+            gameLogger.warn('Debug: Cannot create debug overlay - no background canvas available');
+            return;
+        }
+
+        gameLogger.info('Debug: Creating walkable tile overlay');
+        
+        // Get the existing background canvas
+        const bgCanvas = this.game.renderer.bgCanvas;
+        const canvas = bgCanvas.image;
+        const ctx = canvas.getContext('2d');
+        
+        if (!ctx) {
+            gameLogger.error('Debug: Cannot get canvas context for debug overlay');
+            return;
+        }
+
+        // Set drawing style for debug markers
+        ctx.strokeStyle = '#FF0000'; // Red color for walkable tiles
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.8;
+
+        let walkableCount = 0;
+        let totalTiles = 0;
+
+        // Iterate through all map positions and draw X marks on walkable tiles
+        for (const gridKey in this.map) {
+            if (!this.map.hasOwnProperty(gridKey)) continue;
+            
+            const slab = this.map[gridKey];
+            const x = slab.position.x;
+            const y = slab.position.y;
+            totalTiles++;
+            
+            // Check if this position is walkable
+            if (this.canWalk(x, y)) {
+                walkableCount++;
+                
+                // Convert world coordinates to screen coordinates
+                // This follows the same logic as tile rendering in createBackground
+                const screenX = (x * 16) + (y * 16) - bgCanvas.x;
+                const screenY = (x * 8) - (y * 8) - bgCanvas.y;
+                
+                // Draw a small X mark at the center of the tile
+                const centerX = screenX + 16; // Offset to center of tile
+                const centerY = screenY + 16;
+                const size = 4; // Size of the X mark
+                
+                // Draw the X mark
+                ctx.beginPath();
+                // Top-left to bottom-right
+                ctx.moveTo(centerX - size, centerY - size);
+                ctx.lineTo(centerX + size, centerY + size);
+                // Top-right to bottom-left
+                ctx.moveTo(centerX + size, centerY - size);
+                ctx.lineTo(centerX - size, centerY + size);
+                ctx.stroke();
+            }
+        }
+
+        // Reset alpha
+        ctx.globalAlpha = 1.0;
+
+        gameLogger.info('Debug: Walkable tile overlay complete', {
+            totalTiles: totalTiles,
+            walkableTiles: walkableCount,
+            unwalkableTiles: totalTiles - walkableCount
+        });
     }
 
     crawlMap(): void {
