@@ -73,6 +73,7 @@ export default class World extends EventEmitter {
     mainIsland: number = 0;
     tileMap: Record<string, Tile> = {};
     initializationPromise: Promise<void>;
+    private debugOverlayRefreshScheduled: boolean = false;
 
     constructor(game: Game, worldSize: number) {
         super();
@@ -296,6 +297,29 @@ export default class World extends EventEmitter {
         };
     }
 
+    // Debounced refresh to avoid double-drawing during move (remove + add)
+    private scheduleDebugOverlayRefresh(): void {
+        if (!gameLogger.isDebugMode()) return;
+        if (this.debugOverlayRefreshScheduled) return;
+        this.debugOverlayRefreshScheduled = true;
+        const run = () => {
+            try {
+                // Rebuild background, then paint overlay on top
+                this.createBackground();
+                this.createDebugOverlay();
+            } catch (e) {
+                gameLogger.warn('Debug: Overlay refresh failed', { error: (e as Error)?.message });
+            } finally {
+                this.debugOverlayRefreshScheduled = false;
+            }
+        };
+        if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+            window.requestAnimationFrame(run);
+        } else {
+            setTimeout(run, 0);
+        }
+    }
+
     private createDebugOverlay(): void {
         if (!this.game.renderer.bgCanvas) {
             gameLogger.warn('Debug: Cannot create debug overlay - no background canvas available');
@@ -320,6 +344,7 @@ export default class World extends EventEmitter {
         ctx.globalAlpha = 0.8;
 
         let walkableCount = 0;
+        let actorCount = 0; 
         let totalTiles = 0;
 
         // Iterate through all map positions and draw X marks on walkable tiles
@@ -331,30 +356,121 @@ export default class World extends EventEmitter {
             const y = slab.position.y;
             totalTiles++;
             
-            // Check if this position is walkable
-            if (this.canWalk(x, y)) {
-                walkableCount++;
-                
-                // Convert world coordinates to screen coordinates
-                // This follows the same logic as tile rendering in createBackground
-                const screenX = (x * 16) + (y * 16) - bgCanvas.x;
-                const screenY = (x * 8) - (y * 8) - bgCanvas.y;
-                
-                // Draw a small X mark at the center of the tile
-                const centerX = screenX + 16; // Offset to center of tile
-                const centerY = screenY + 16;
-                const size = 4; // Size of the X mark
-                
-                // Draw the X mark
+            // Determine if this tile is occupied by an Actor
+            let actorHere = false;
+            const yObjects = this.objects[x]?.[y];
+            if (yObjects) {
+                for (const zKey in yObjects) {
+                    if (!yObjects.hasOwnProperty(zKey)) continue;
+                    const obj: any = yObjects[zKey];
+                    if (obj && obj.constructor && obj.constructor.name === 'Actor') {
+                        actorHere = true;
+                        break;
+                    }
+                }
+            }
+
+            // Convert world coordinates to screen coordinates (tile center)
+            // Use the same isometric transform as actors, then adjust by bgCanvas origin
+            const z = slab.position.z;
+            const eastShift = 8; // slight eastward pixel tweak for alignment
+            const centerX = ((x - y) * 16 - 8 + eastShift) - bgCanvas.x;
+            const centerY = ((x + y) * 8 - (z) * 16 - 8) - bgCanvas.y;
+            const size = 4; // Size of the X mark
+
+            if (actorHere) {
+                // Draw blue marker for actor-occupied tiles (even if temporarily unwalkable)
+                actorCount++;
+                ctx.strokeStyle = '#007BFF';
                 ctx.beginPath();
-                // Top-left to bottom-right
                 ctx.moveTo(centerX - size, centerY - size);
                 ctx.lineTo(centerX + size, centerY + size);
-                // Top-right to bottom-left
+                ctx.moveTo(centerX + size, centerY - size);
+                ctx.lineTo(centerX - size, centerY + size);
+                ctx.stroke();
+                // Restore default red for subsequent tiles
+                ctx.strokeStyle = '#FF0000';
+            } else if (this.canWalk(x, y)) {
+                // Draw red marker for walkable tiles without actors
+                walkableCount++;
+                ctx.beginPath();
+                ctx.moveTo(centerX - size, centerY - size);
+                ctx.lineTo(centerX + size, centerY + size);
                 ctx.moveTo(centerX + size, centerY - size);
                 ctx.lineTo(centerX - size, centerY + size);
                 ctx.stroke();
             }
+        }
+
+        // Draw isometric compass (N/E/S/W) to indicate world directions on screen
+        // In isometric projection used here:
+        //  - North (0,-1) maps to roughly up-right (dx=+16, dy=-8)
+        //  - East  (+1,0) maps to down-right (dx=+16, dy=+8)
+        //  - South (0,+1) maps to down-left (dx=-16, dy=+8)
+        //  - West  (-1,0) maps to up-left (dx=-16, dy=-8)
+        try {
+            const originX = 40;
+            const originY = 40;
+            const scale = 3; // enlarge the directional vectors for visibility
+
+            // Save state for compass styling
+            ctx.save();
+            ctx.globalAlpha = 0.95;
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#00AAFF';
+            ctx.fillStyle = '#00AAFF';
+            ctx.font = '12px sans-serif';
+
+            // Helper to draw an arrow from (x1,y1) to (x2,y2)
+            const drawArrow = (x1: number, y1: number, x2: number, y2: number) => {
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.stroke();
+                // Arrow head
+                const angle = Math.atan2(y2 - y1, x2 - x1);
+                const headLen = 6;
+                ctx.beginPath();
+                ctx.moveTo(x2, y2);
+                ctx.lineTo(x2 - headLen * Math.cos(angle - Math.PI / 6), y2 - headLen * Math.sin(angle - Math.PI / 6));
+                ctx.lineTo(x2 - headLen * Math.cos(angle + Math.PI / 6), y2 - headLen * Math.sin(angle + Math.PI / 6));
+                ctx.lineTo(x2, y2);
+                ctx.fill();
+            };
+
+            // Direction vectors (screen deltas per grid step)
+            const dirs = {
+                N: { dx: 16, dy: -8 },
+                E: { dx: 16, dy: 8 },
+                S: { dx: -16, dy: 8 },
+                W: { dx: -16, dy: -8 }
+            } as const;
+
+            // Draw crosshair at origin
+            ctx.beginPath();
+            ctx.arc(originX, originY, 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw arrows and labels
+            const endN = { x: originX + dirs.N.dx * scale, y: originY + dirs.N.dy * scale };
+            const endE = { x: originX + dirs.E.dx * scale, y: originY + dirs.E.dy * scale };
+            const endS = { x: originX + dirs.S.dx * scale, y: originY + dirs.S.dy * scale };
+            const endW = { x: originX + dirs.W.dx * scale, y: originY + dirs.W.dy * scale };
+            drawArrow(originX, originY, endN.x, endN.y);
+            drawArrow(originX, originY, endE.x, endE.y);
+            drawArrow(originX, originY, endS.x, endS.y);
+            drawArrow(originX, originY, endW.x, endW.y);
+
+            // Labels slightly past arrow tips
+            ctx.fillText('N', endN.x + 6, endN.y - 2);
+            ctx.fillText('E', endE.x + 6, endE.y + 12);
+            ctx.fillText('S', endS.x - 14, endS.y + 12);
+            ctx.fillText('W', endW.x - 14, endW.y - 2);
+
+            // Restore context state after compass
+            ctx.restore();
+        } catch (e) {
+            gameLogger.warn('Debug: Failed to draw compass overlay', { error: (e as Error)?.message });
         }
 
         // Reset alpha
@@ -363,7 +479,8 @@ export default class World extends EventEmitter {
         gameLogger.info('Debug: Walkable tile overlay complete', {
             totalTiles: totalTiles,
             walkableTiles: walkableCount,
-            unwalkableTiles: totalTiles - walkableCount
+            unwalkableTiles: totalTiles - walkableCount,
+            actorTiles: actorCount
         });
     }
 
@@ -675,6 +792,10 @@ export default class World extends EventEmitter {
         }
         this.objects[obj.position.x][obj.position.y][obj.position.z] = obj;
         this.updateWalkable(obj.position.x, obj.position.y);
+        // If an Actor is added, refresh debug overlay (in debug mode)
+        if ((obj as any)?.constructor?.name === 'Actor') {
+            this.scheduleDebugOverlayRefresh();
+        }
         return true;
     }
 
@@ -682,6 +803,10 @@ export default class World extends EventEmitter {
         if (this.objects[obj.position.x]?.[obj.position.y]?.[obj.position.z]) {
             delete this.objects[obj.position.x][obj.position.y][obj.position.z];
             this.updateWalkable(obj.position.x, obj.position.y);
+            // If an Actor is removed, refresh debug overlay (in debug mode)
+            if ((obj as any)?.constructor?.name === 'Actor') {
+                this.scheduleDebugOverlayRefresh();
+            }
         }
     }
 
@@ -691,6 +816,7 @@ export default class World extends EventEmitter {
         obj.position.y = y;
         obj.position.z = z;
         this.addToWorld(obj);
+        // Do not trigger here to avoid double refresh; add/remove already schedule a refresh
     }
 
     updateWalkable(x: number, y: number): void {
