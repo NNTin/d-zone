@@ -4,7 +4,7 @@ import { defineConfig, devices } from '@playwright/test';
  * @see https://playwright.dev/docs/test-configuration
  */
 export default defineConfig({
-  testDir: './tests',
+  testDir: './tests/e2e',
   testMatch: '**/*.e2e.{ts,js}',
   
   /* Run tests in files in parallel */
@@ -51,8 +51,8 @@ export default defineConfig({
     /* Screenshot settings */
     screenshot: 'only-on-failure',
     
-    /* Video settings */
-    video: 'retain-on-failure',
+    /* Video settings - always capture locally, retain only on failure in CI */
+    video: process.env.CI ? 'retain-on-failure' : 'on',
   },
 
   /* Configure projects for major browsers */
@@ -82,5 +82,8 @@ export default defineConfig({
     timeout: 120 * 1000,
     stdout: 'pipe',
     stderr: 'pipe',
+    env: {
+      E2E_MODE: 'true'
+    }
   },
 });
