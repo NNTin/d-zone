@@ -770,11 +770,6 @@ export default class Actor extends WorldObject {
     }
 
     goto(x: number, y: number): void {
-        gameLogger.debug('Actor goto command', {
-            actor: this.username,
-            targetX: x,
-            targetY: y
-        });
         const target = { position: { x: x, y: y, z: (this.game as any).world.getHeight(x, y) } };
         
         // Remove existing GoTo behaviors
@@ -784,6 +779,12 @@ export default class Actor extends WorldObject {
                 this.behaviors.splice(i, 1);
             }
         }
+        
+        gameLogger.actorGoto({
+            username: this.username,
+            targetX: x,
+            targetY: y
+        });
         
         // Add new GoTo behavior
         this.behaviors.push(new GoTo(this, target));

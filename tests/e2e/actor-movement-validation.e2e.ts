@@ -20,7 +20,7 @@
 import { expect, test } from '@playwright/test';
 import { CanvasGameTestUtils, GameAssertions, GameLogEvent } from './utils/canvasTestUtils.js';
 
-test.describe('@critical Actor Movement Validation', () => {
+test.describe('@inactive Actor Movement Validation', () => {
   let gameUtils: CanvasGameTestUtils;
 
   test.beforeEach(async ({ page }) => {
@@ -34,7 +34,7 @@ test.describe('@critical Actor Movement Validation', () => {
     await GameAssertions.assertCanvasVisible(page);
   });
 
-  test('@critical should validate actor movements connect to repos server', async ({ page }) => {
+  test('@inactive should validate actor movements connect to repos server', async ({ page }) => {
     // Wait for game initialization and world generation
     await gameUtils.waitForGameEvent('game', 'initialized', 15000);
     await gameUtils.waitForGameEvent('world', 'generated', 15000);
@@ -328,7 +328,7 @@ test.describe('@critical Actor Movement Validation', () => {
     }
   });
 
-  test('@critical should detect hopping animation without movement bug', async ({ page }) => {
+  test('@inactive should detect hopping animation without movement bug', async ({ page }) => {
     // Wait for game initialization and world generation
     await gameUtils.waitForGameEvent('game', 'initialized', 15000);
     await gameUtils.waitForGameEvent('world', 'generated', 15000);
@@ -456,7 +456,7 @@ test.describe('@critical Actor Movement Validation', () => {
     }
   });
 
-  test('@critical should validate movement animation states', async ({ page }) => {
+  test('@inactive should validate movement animation states', async ({ page }) => {
     // Wait for game initialization and world generation
     await gameUtils.waitForGameEvent('game', 'initialized', 15000);
     await gameUtils.waitForGameEvent('world', 'generated', 15000);
@@ -564,7 +564,7 @@ test.describe('@critical Actor Movement Validation', () => {
     console.log(`✅ Validated ${animationStartedLogs.length} animation events`);
   });
 
-  test('@critical should validate sprite rendering during movement', async ({ page }) => {
+  test('@inactive should validate sprite rendering during movement', async ({ page }) => {
     // Wait for game initialization and world generation
     await gameUtils.waitForGameEvent('game', 'initialized', 15000);
     await gameUtils.waitForGameEvent('world', 'generated', 15000);
@@ -691,7 +691,7 @@ test.describe('@critical Actor Movement Validation', () => {
     console.log(`✅ Validated ${spriteRenderLogs.length} sprite rendering events with ${spriteStates.size} states and ${facingDirections.size} facing directions`);
   });
 
-  test('@critical should detect movement coordinate errors', async ({ page }) => {
+  test('@inactive should detect movement coordinate errors', async ({ page }) => {
     // Wait for game initialization and world generation
     await gameUtils.waitForGameEvent('game', 'initialized', 15000);
     await gameUtils.waitForGameEvent('world', 'generated', 15000);

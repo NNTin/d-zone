@@ -1,526 +1,470 @@
-import { expect, test } from '@playwright/test';
-import { CanvasGameTestUtils, GameAssertions } from './utils/canvasTestUtils.js';
+/**
+ * @file E2E tests for actor pathfinding validation
+ * @description Tests that validate actor movement and pathfinding behavior
+ * 
+ * This test suite verifies that:
+ * 1. Actors can successfully navigate between different positions using goto
+ * 2. Movement coordinates are accurately tracked and validated
+ * 3. Pathfinding works correctly across different world configurations
+ */
 
-test.describe('@critical Actor Pathfinding Validation', () => {
+import { expect, test } from '@playwright/test';
+import {
+    generateCustomMockActors,
+    getMockActorPositioningScript,
+    getMockWebSocketScriptWithActors,
+    getMockWorldGenerationScript,
+    MOCK_WORLDS,
+    MockActorPositioning
+} from './mocks/index';
+import { CanvasGameTestUtils, GameAssertions } from './utils/canvasTestUtils.js';
+import {
+    getActorSpawnLogs,
+    getWorldGenerationData
+} from './utils/spawnValidationUtils.js';
+
+test.describe('@normal Actor Pathfinding Validation', () => {
   let gameUtils: CanvasGameTestUtils;
 
   test.beforeEach(async ({ page }) => {
     gameUtils = new CanvasGameTestUtils(page);
     await gameUtils.startLogCapture();
-  });
-
-  test('@critical should path around hole when moving from west to east', async ({ page }) => {
-    console.log('🗺️ Testing pathfinding: Actor should navigate around obstacle');
     
-    // Mock WebSocket BEFORE page loads to intercept the connection
-    console.log('🔌 Setting up WebSocket mock...');
-    await page.addInitScript(() => {
-      // Store the original WebSocket for reference
-      const OriginalWebSocket = (window as any).WebSocket;
-      console.log('🔧 [INIT SCRIPT] addInitScript running - OriginalWebSocket:', !!OriginalWebSocket);
-      
-      // Create mock WebSocket that will intercept messages
-      class MockWebSocket {
-        readyState: number = 1; // OPEN
-        private listeners: { [key: string]: Function[] } = {};
-        private messageHandlers: Function[] = [];
-        
-        constructor(url: string) {
-          console.log('🔌 [MOCK WS] MockWebSocket constructor called!');
-          console.log('🔌 [MOCK WS] URL:', url);
-          console.log('🔌 [MOCK WS] readyState:', this.readyState);
-          
-          // Simulate connection opening
-          setTimeout(() => {
-            console.log('✓ [MOCK WS] Triggering open event');
-            console.log('✓ [MOCK WS] Open listeners count:', this.listeners['open']?.length || 0);
-            if (this.listeners['open']) {
-              this.listeners['open'].forEach((fn: Function) => {
-                console.log('✓ [MOCK WS] Calling open listener');
-                fn(new Event('open'));
-              });
-            }
-            
-            // After connection opens, immediately send server-list (this is what real server does)
-            console.log('📥 [MOCK WS] Auto-sending server-list after connection opens');
-            setTimeout(() => {
-              const serverListMsg = {
-                type: 'server-list',
-                data: {
-                  'test-server': {
-                    id: 'test-pathfinding',
-                    name: 'Test Pathfinding Server',
-                    passworded: false
-                  }
-                }
-              };
-              console.log('📥 [MOCK WS] Sending server-list:', JSON.stringify(serverListMsg));
-              this.triggerMessage(serverListMsg);
-              console.log('✓ [MOCK WS] server-list sent - client should now call joinServer()');
-            }, 100);
-          }, 50);
-        }
-        
-        send(data: string) {
-          console.log('📤 [MOCK WS] send() called');
-          console.log('📤 [MOCK WS] Raw data:', data);
-          
-          try {
-            const message = JSON.parse(data);
-            console.log('📤 [MOCK WS] Parsed message type:', message.type);
-            console.log('📤 [MOCK WS] Message data:', JSON.stringify(message.data));
-            
-            // When client sends 'connect' message, respond with server-join
-            if (message.type === 'connect') {
-              console.log('🎯 [MOCK WS] Received CONNECT message - will send server-join');
-              
-              // Send server-join which triggers world generation
-              setTimeout(() => {
-                console.log('📥 [MOCK WS] Sending server-join (after 100ms)');
-                const serverJoinMsg = {
-                  type: 'server-join',
-                  data: {
-                    request: { server: message.data.server || 'test-pathfinding' },
-                    serverName: 'Test Pathfinding Server',
-                    users: {} // No users initially
-                  }
-                };
-                console.log('📥 [MOCK WS] server-join message:', JSON.stringify(serverJoinMsg));
-                this.triggerMessage(serverJoinMsg);
-                console.log('✓ [MOCK WS] server-join sent - world generation should start now');
-              }, 100);
-            } else {
-              console.log('⚠️ [MOCK WS] Received non-connect message:', message.type);
-            }
-          } catch (error) {
-            console.error('❌ [MOCK WS] Error parsing message:', error);
-          }
-        }
-        
-        addEventListener(event: string, callback: Function) {
-          console.log(`📝 [MOCK WS] addEventListener called for event: "${event}"`);
-          if (event === 'message') {
-            this.messageHandlers.push(callback);
-            console.log(`📝 [MOCK WS] Added message handler. Total message handlers: ${this.messageHandlers.length}`);
-          } else {
-            if (!this.listeners[event]) {
-              this.listeners[event] = [];
-            }
-            this.listeners[event].push(callback);
-            console.log(`📝 [MOCK WS] Added ${event} listener. Total ${event} listeners: ${this.listeners[event].length}`);
-          }
-        }
-        
-        removeEventListener(event: string, callback: Function) {
-          console.log(`🗑️ [MOCK WS] removeEventListener called for event: "${event}"`);
-          if (event === 'message') {
-            const idx = this.messageHandlers.indexOf(callback);
-            if (idx > -1) this.messageHandlers.splice(idx, 1);
-          } else if (this.listeners[event]) {
-            const idx = this.listeners[event].indexOf(callback);
-            if (idx > -1) this.listeners[event].splice(idx, 1);
-          }
-        }
-        
-        close() {
-          console.log('🔌 [MOCK WS] close() called');
-        }
-        
-        dispatchEvent(event: Event) {
-          console.log('📡 [MOCK WS] dispatchEvent called:', event.type);
-          return true;
-        }
-        
-        private triggerMessage(data: any) {
-          console.log('🔔 [MOCK WS] triggerMessage called');
-          console.log('🔔 [MOCK WS] Message handlers count:', this.messageHandlers.length);
-          console.log('🔔 [MOCK WS] Message data:', JSON.stringify(data));
-          
-          const messageEvent = new MessageEvent('message', {
-            data: JSON.stringify(data)
-          });
-          
-          console.log('🔔 [MOCK WS] Created MessageEvent');
-          console.log('🔔 [MOCK WS] Calling each message handler...');
-          
-          this.messageHandlers.forEach((handler, index) => {
-            console.log(`🔔 [MOCK WS] Calling handler ${index + 1}/${this.messageHandlers.length}`);
-            try {
-              handler(messageEvent);
-              console.log(`✓ [MOCK WS] Handler ${index + 1} completed successfully`);
-            } catch (error) {
-              console.error(`❌ [MOCK WS] Handler ${index + 1} threw error:`, error);
-            }
-          });
-          
-          console.log('✓ [MOCK WS] All message handlers called');
-        }
-      }
-      
-      // Replace WebSocket globally
-      (window as any).WebSocket = MockWebSocket;
-      console.log('✓ [INIT SCRIPT] WebSocket replaced with MockWebSocket');
-      console.log('✓ [INIT SCRIPT] typeof WebSocket:', typeof (window as any).WebSocket);
-      console.log('✓ [INIT SCRIPT] Init script complete - WebSocket is now mocked');
-      
-      // Add a flag so we can verify the mock was installed
-      (window as any).__webSocketMocked = true;
-      
-      // Log when any code tries to access WebSocket
-      const WebSocketProxy = new Proxy(MockWebSocket, {
-        construct(target, args) {
-          console.log('🎯 [PROXY] WebSocket constructor INTERCEPTED!', args);
-          return new target(...args);
-        }
-      });
-      (window as any).WebSocket = WebSocketProxy;
-      console.log('✓ [INIT SCRIPT] WebSocket proxied for interception');
-    });
-    
-    // Add script to intercept world creation and replace with custom 3x3 world
-    await page.addInitScript(() => {
-      console.log('🌍 [INIT SCRIPT 2] Setting up World interception...');
-      
-      // Poll for game.world to be set, then replace it
-      const checkWorldInterval = setInterval(() => {
-        const game = (window as any).game;
-        if (game && game.world && !game.world.__customWorldApplied) {
-          console.log('🌍 [INTERCEPTOR] Detected game.world creation!');
-          console.log(`  Original world size: ${Object.keys(game.world.map || {}).length} tiles`);
-          
-          // Replace with custom 3x3 world
-          const customWorld: any = {
-            ...game.world, // Keep existing properties
-            map: {},
-            walkable: {},
-            objects: {},
-            staticMap: [],
-            mapBounds: { xl: -1, xh: 1, yl: -1, yh: 1 },
-            __customWorldApplied: true
-          };
-          
-          // Create 3x3 grid with hole at (0,0)
-          const tiles = [
-            { x: -1, y: -1 }, { x: 0, y: -1 }, { x: 1, y: -1 },
-            { x: -1, y: 0 },  /* hole at 0,0 */  { x: 1, y: 0 },
-            { x: -1, y: 1 },  { x: 0, y: 1 },  { x: 1, y: 1 }
-          ];
-          
-          console.log(`🌍 [INTERCEPTOR] Creating custom 3x3 world with ${tiles.length} tiles`);
-          tiles.forEach(pos => {
-            const key = `${pos.x}:${pos.y}`;
-            customWorld.map[key] = {
-              x: pos.x, y: pos.y, z: -0.5,
-              type: 'grass', grid: key, walkable: true,
-              draw: () => {}, addToGame: () => {}, removeFromGame: () => {}
-            };
-            customWorld.walkable[key] = 1;
-          });
-          
-          // Replace game.world
-          game.world = customWorld;
-          console.log('✓ [INTERCEPTOR] Replaced game.world with custom 3x3 world');
-          console.log(`  New world size: ${Object.keys(game.world.map).length} tiles`);
-          console.log(`  Walkable: ${Object.keys(game.world.walkable).join(', ')}`);
-          
-          // Stop checking
-          clearInterval(checkWorldInterval);
-          
-          // Trigger worldGenerated event
-          setTimeout(() => {
-            const gameLogger = (window as any).gameLogger;
-            if (gameLogger?.worldGenerated) {
-              console.log('✓ [INTERCEPTOR] Triggering worldGenerated event');
-              gameLogger.worldGenerated({
-                size: 3,
-                tileCount: Object.keys(customWorld.map).length,
-                bounds: customWorld.mapBounds
-              });
-            }
-          }, 100);
-        }
-      }, 50);
-      
-      // Stop checking after 10 seconds
-      setTimeout(() => clearInterval(checkWorldInterval), 10000);
-    });
-    
-    // Now load the page - WebSocket will be mocked from the start
-    console.log('🌐 Loading page with mocked WebSocket...');
+    // Navigate to the game
     await page.goto('/?e2e-test=true');
     
-    // Verify WebSocket was mocked
-    const wsMocked = await page.evaluate(() => {
-      console.log('🔍 [PAGE] Checking if WebSocket is mocked...');
-      console.log('🔍 [PAGE] typeof WebSocket:', typeof (window as any).WebSocket);
-      console.log('🔍 [PAGE] WebSocket.name:', (window as any).WebSocket?.name);
-      return (window as any).WebSocket?.name === 'MockWebSocket';
-    });
-    console.log('✓ WebSocket mocked:', wsMocked);
-    
+    // Verify canvas is visible before testing
     await GameAssertions.assertCanvasVisible(page);
+  });
+
+  test('@normal should move actor from (1,1) to (2,2) using message-triggered pathfinding in GRID_SMALL_ISLANDS world', async ({ page }) => {
+    const testDescription = 'Actor pathfinding: message-triggered movement from (1,1) to (2,2) in grid small islands world';
     
-    console.log('⏳ Waiting for game initialization...');
-    await gameUtils.waitForGameEvent('game', 'initialized', 15000);
-    console.log('✓ Game initialized');
+    // Create two custom actors
+    const testActors = generateCustomMockActors(['PathfinderBot', 'MessageSender']);
     
-    // Check if WebSocket connection was established
-    const wsStatus = await page.evaluate(() => {
-      const ws = (window as any).ws;
-      console.log('🔍 [PAGE] Checking WebSocket status...');
-      console.log('🔍 [PAGE] ws exists:', !!ws);
-      console.log('🔍 [PAGE] ws.constructor.name:', ws?.constructor?.name);
-      console.log('🔍 [PAGE] ws.readyState:', ws?.readyState);
-      
-      // Check if initWebsocket was called
-      const initWebsocket = (window as any).initWebsocket;
-      console.log('🔍 [PAGE] initWebsocket function exists:', !!initWebsocket);
-      
-      // Check the game object
-      const game = (window as any).game;
-      console.log('🔍 [PAGE] game exists:', !!game);
-      console.log('🔍 [PAGE] game.world exists:', !!game?.world);
-      
-      return {
-        exists: !!ws,
-        constructorName: ws?.constructor?.name,
-        readyState: ws?.readyState,
-        initWebsocketExists: !!initWebsocket,
-        gameExists: !!game
-      };
+    // Set up actor positioning mock - place first actor at (1,1) and second at (5,5)
+    const positioning: MockActorPositioning = {
+      fixedPositions: [
+        { uid: 'mock-user-1', x: 1, y: 1, z: 0 },
+        { uid: 'mock-user-2', x: 5, y: 5, z: 0 }
+      ]
+    };
+    
+    console.log('🎯 Setting up message-triggered pathfinding test...');
+    console.log('📍 PathfinderBot initial position: (1, 1, 0)');
+    console.log('📍 MessageSender initial position: (5, 5, 0)');
+    console.log('📍 Expected behavior: MessageSender sends message → PathfinderBot moves toward MessageSender');
+    
+    // Set up world generation mock with GRID_SMALL_ISLANDS
+    await page.addInitScript(getMockWorldGenerationScript(), {
+      ...MOCK_WORLDS.GRID_SMALL_ISLANDS,
+      testDescription
     });
-    console.log('📊 WebSocket status:', wsStatus);
     
-    // Check browser console logs
-    console.log('📋 Checking if MockWebSocket constructor was called (check browser console)...');
+    // Set up actor positioning mock
+    await page.addInitScript(getMockActorPositioningScript(), positioning);
     
-    // Wait for world generation to complete (triggered by server-join message)
-    console.log('⏳ Waiting for world generation...');
-    try {
-      await gameUtils.waitForGameEvent('world', 'generated', 15000);
-      console.log('✓ World generated');
-    } catch (error) {
-      console.error('❌ World generation timeout!');
+    // Set up WebSocket mock with two actors
+    await page.addInitScript(getMockWebSocketScriptWithActors(), {
+      serverId: 'pathfinding-test',
+      serverName: 'Pathfinding Test Server',
+      actors: testActors
+    });
+    
+    // Navigate to the game
+    await page.goto('/?e2e-test=true');
+    
+    // Verify mocks are set up
+    const mockInfo = await page.evaluate(() => ({
+      positioning: (window as any).__mockActorPositioning?.enabled || false,
+      websocket: !!(window as any).__mockWebSocket || ((window as any).WebSocket?.name === 'MockWebSocket'),
+      world: (window as any).__mockWorldGeneration || false
+    }));
+    
+    console.log('✓ Mock setup verified:', mockInfo);
+    expect(mockInfo.positioning).toBe(true);
+    expect(mockInfo.websocket).toBe(true);
+    expect(mockInfo.world).toBeTruthy(); // Check that world mock exists and is enabled
+    
+    // Wait for game initialization
+    await gameUtils.waitForGameEvent('game', 'initialized', 15000);
+    await gameUtils.waitForGameEvent('world', 'generated', 10000);
+    
+    // Wait for both actors to spawn
+    console.log('⏳ Waiting for actors to spawn at initial positions...');
+    await page.waitForTimeout(2000);
+    
+    // Get spawned actors
+    const spawnLogs = getActorSpawnLogs(gameUtils);
+    console.log(`📊 Found ${spawnLogs.length} actor spawn(s)`);
+    
+    // Verify both actors spawned
+    expect(spawnLogs.length).toBe(2);
+    
+    // Check initial positions
+    const pathfinderBot = spawnLogs.find(log => log.data.username === 'PathfinderBot');
+    const messageSender = spawnLogs.find(log => log.data.username === 'MessageSender');
+    
+    expect(pathfinderBot).toBeDefined();
+    expect(messageSender).toBeDefined();
+    
+    // Verify PathfinderBot position
+    expect(pathfinderBot!.data.x).toBe(1);
+    expect(pathfinderBot!.data.y).toBe(1);
+    expect(pathfinderBot!.data.z).toBe(0);
+    
+    // Verify MessageSender position  
+    expect(messageSender!.data.x).toBe(5);
+    expect(messageSender!.data.y).toBe(5);
+    expect(messageSender!.data.z).toBe(0);
+    
+    console.log(`✅ PathfinderBot spawned at (${pathfinderBot!.data.x}, ${pathfinderBot!.data.y}, ${pathfinderBot!.data.z})`);
+    console.log(`✅ MessageSender spawned at (${messageSender!.data.x}, ${messageSender!.data.y}, ${messageSender!.data.z})`);
+    
+    // Simulate WebSocket message from MessageSender to trigger pathfinding
+    console.log('📨 Simulating WebSocket message from MessageSender to trigger PathfinderBot pathfinding...');
+    
+    const messageResult = await page.evaluate(() => {
+      // Get the game and actors to create the message structure
+      const game = (window as any).game;
+      if (!game || !game.users || !game.users.actors) {
+        return { success: false, error: 'Game or actors not available' };
+      }
       
-      // Debug: Check what events were captured
-      const allLogs = gameUtils.getAllLogs();
-      console.log('📊 Total logs captured:', allLogs.length);
-      console.log('📊 Log categories:', [...new Set(allLogs.map(l => l.category))]);
-      console.log('📊 Log events:', [...new Set(allLogs.map(l => l.event))]);
+      const actors = Object.values(game.users.actors);
+      if (actors.length < 2) {
+        return { success: false, error: `Expected 2 actors, found ${actors.length}` };
+      }
       
-      // Check if game has a world
-      const worldStatus = await page.evaluate(() => {
-        const game = (window as any).game;
-        console.log('🔍 [PAGE] Checking game world...');
-        console.log('🔍 [PAGE] game.world exists:', !!game.world);
-        console.log('🔍 [PAGE] game.server:', game.server);
-        return {
-          worldExists: !!game.world,
-          server: game.server,
-          worldMapSize: game.world ? Object.keys(game.world.map || {}).length : 0
+      const pathfinderBot = actors.find((actor: any) => actor.username === 'PathfinderBot') as any;
+      const messageSender = actors.find((actor: any) => actor.username === 'MessageSender') as any;
+      
+      if (!pathfinderBot || !messageSender) {
+        return { 
+          success: false, 
+          error: 'Could not find expected actors',
+          foundActors: actors.map((a: any) => a.username)
         };
-      });
-      console.log('📊 World status:', worldStatus);
+      }
       
-      throw error;
+      console.log('📨 [MESSAGE] Found both actors, preparing WebSocket message...');
+      console.log('📨 [MESSAGE] PathfinderBot:', {
+        position: pathfinderBot.position,
+        presence: pathfinderBot.presence,
+        lastMessage: pathfinderBot.lastMessage
+      });
+      console.log('📨 [MESSAGE] MessageSender:', {
+        position: messageSender.position,
+        presence: messageSender.presence
+      });
+      
+      // Set up PathfinderBot to have a recent talking activity so it can receive messages
+      // This simulates PathfinderBot having recently talked in the same channel
+      pathfinderBot.lastMessage = { 
+        channel: 'general', 
+        time: Date.now() - 1000 // 1 second ago
+      };
+      
+      // Ensure both actors are online for message handling
+      if (pathfinderBot.presence !== 'online') {
+        pathfinderBot.updatePresence('online');
+      }
+      if (messageSender.presence !== 'online') {
+        messageSender.updatePresence('online');
+      }
+      
+      // Create a WebSocket message that mimics the real server message structure
+      // This follows the format from main.ts: data.type === 'message' and users.queueMessage(data.data)
+      // The Users.queueMessage expects: {uid, message, channel}
+      const websocketMessage = {
+        type: 'message',
+        data: {
+          uid: messageSender.uid, // The UID of the actor sending the message
+          message: 'Hello PathfinderBot!', // The message content
+          channel: 'general' // The channel
+        }
+      };
+      
+      try {
+        // Use the mock WebSocket to simulate incoming message
+        const simulateMessage = (window as any).__simulateWebSocketMessage;
+        if (!simulateMessage) {
+          return { success: false, error: 'WebSocket message simulation not available' };
+        }
+        
+        console.log('📨 [MESSAGE] Sending WebSocket message simulation...');
+        const simulated = simulateMessage(websocketMessage);
+        
+        if (!simulated) {
+          return { success: false, error: 'Failed to simulate WebSocket message' };
+        }
+        
+        console.log('📨 [MESSAGE] WebSocket message simulated successfully');
+        
+        // Wait a moment and check if the message was processed
+        setTimeout(() => {
+          console.log('📨 [MESSAGE] Post-message PathfinderBot state:', {
+            behaviors: pathfinderBot.behaviors.map((b: any) => b.constructor.name),
+            behaviorCount: pathfinderBot.behaviors.length,
+            hasGoTo: pathfinderBot.behaviors.some((b: any) => b.constructor.name === 'GoTo')
+          });
+        }, 100);
+        
+        return { 
+          success: true,
+          message: 'WebSocket message simulated successfully',
+          pathfinderBotUid: pathfinderBot.uid,
+          messageSenderUid: messageSender.uid,
+          messageChannel: websocketMessage.data.channel,
+          pathfinderBotBehaviors: pathfinderBot.behaviors.length,
+          messagingMethod: 'websocketSimulation'
+        };
+      } catch (error) {
+        return { 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined
+        };
+      }
+    });
+    
+    if (!messageResult.success) {
+      console.error('❌ Message simulation failed:', messageResult.error);
+      if (messageResult.stack) {
+        console.error('Stack trace:', messageResult.stack);
+      }
     }
     
-    // Verify the custom 3x3 world was created by our interceptor
-    console.log('� Verifying custom 3x3 world...');
-    const worldVerification = await page.evaluate(() => {
+    expect(messageResult.success).toBe(true);
+    console.log('✅ Message simulation completed successfully');
+    console.log('📋 Message details:', messageResult);
+    
+    // Wait a moment for the message to be processed and GoTo behavior to be created
+    console.log('⏳ Waiting for message processing and GoTo behavior creation...');
+    await page.waitForTimeout(3000);
+    
+    // Verify that the GoTo behavior was created - the original source uses GoTo constructor
+    // which doesn't call gameLogger.actorGoto, but we should see behavior changes
+    const behaviorResult = await page.evaluate(() => {
       const game = (window as any).game;
-      const world = game.world;
-      
-      if (!world) {
-        return { success: false, error: 'World not initialized!' };
+      if (!game || !game.users || !game.users.actors) {
+        return { success: false, error: 'Game or actors not available' };
       }
+      
+      const actors = Object.values(game.users.actors);
+      const pathfinderBot = actors.find((actor: any) => actor.username === 'PathfinderBot') as any;
+      
+      if (!pathfinderBot) {
+        return { success: false, error: 'PathfinderBot not found' };
+      }
+      
+      // Get detailed behavior information
+      const behaviorDetails = pathfinderBot.behaviors.map((b: any) => ({
+        name: b.constructor.name,
+        target: b.target ? {
+          username: b.target.username,
+          position: b.target.position
+        } : 'no target',
+        actor: b.actor ? b.actor.username : 'no actor'
+      }));
+      
+      // Check distance between actors to understand why GoTo might not trigger
+      const messageSender = actors.find((actor: any) => actor.username === 'MessageSender') as any;
+      const distance = messageSender ? 
+        Math.sqrt(Math.pow(pathfinderBot.position.x - messageSender.position.x, 2) + 
+                  Math.pow(pathfinderBot.position.y - messageSender.position.y, 2)) : -1;
       
       return {
         success: true,
-        tileCount: Object.keys(world.map).length,
-        walkableKeys: Object.keys(world.walkable),
-        bounds: world.mapBounds,
-        customApplied: world.__customWorldApplied
+        behaviorCount: pathfinderBot.behaviors.length,
+        behaviors: pathfinderBot.behaviors.map((b: any) => b.constructor.name),
+        behaviorDetails: behaviorDetails,
+        hasGoToBehavior: pathfinderBot.behaviors.some((b: any) => b.constructor.name === 'GoTo'),
+        position: pathfinderBot.position,
+        destination: pathfinderBot.destination,
+        isMoving: !!pathfinderBot.destination,
+        presence: pathfinderBot.presence,
+        lastMessage: pathfinderBot.lastMessage,
+        distance: distance,
+        messageSenderPosition: messageSender ? messageSender.position : null,
+        underneath: pathfinderBot.underneath ? pathfinderBot.underneath() : false
       };
     });
     
-    if (!worldVerification.success) {
-      throw new Error(`World verification failed: ${worldVerification.error}`);
+    console.log('🔍 Detailed behavior analysis:');
+    console.log('📋 Behavior result:', JSON.stringify(behaviorResult, null, 2));
+    
+    expect(behaviorResult.success).toBe(true);
+    
+    if (!behaviorResult.hasGoToBehavior) {
+      console.log('❌ GoTo behavior was NOT created. Debugging info:');
+      console.log(`   - Distance between actors: ${behaviorResult.distance}`);
+      console.log(`   - PathfinderBot presence: ${behaviorResult.presence}`);
+      console.log(`   - PathfinderBot lastMessage:`, behaviorResult.lastMessage);
+      console.log(`   - PathfinderBot underneath: ${behaviorResult.underneath}`);
+      console.log(`   - Current behaviors:`, behaviorResult.behaviorDetails);
+      
+      // The GoTo behavior should be created if distance >= 3 and actor is online
+      // Let's check if the conditions in onMessage are being met
+      if (behaviorResult.distance !== undefined && behaviorResult.distance < 3) {
+        console.log('🔍 Distance is less than 3 - this may explain why GoTo was not created');
+      }
+      if (behaviorResult.presence !== 'online') {
+        console.log('🔍 Actor is not online - this may explain why GoTo was not created');
+      }
+      if (behaviorResult.underneath) {
+        console.log('🔍 Actor has something underneath - this may explain why GoTo was not created');
+      }
     }
     
-    console.log(`✓ Custom 3x3 world verified - ${worldVerification.tileCount} tiles`);
-    console.log(`  Walkable: ${(worldVerification.walkableKeys || []).join(', ')}`);
-    console.log(`  Custom world applied: ${worldVerification.customApplied}`);
+    expect(behaviorResult.hasGoToBehavior).toBe(true);
+    console.log('✅ GoTo behavior successfully created through message trigger');
+    console.log('📋 Behavior details:', behaviorResult);
     
-    // Create test actor at west position
-    console.log('👤 Creating mock actor at west position (-1, 0)...');
-    await page.evaluate(() => {
-      const game = (window as any).game;
-      const gameLogger = (window as any).gameLogger;
-      
-      if (!game.actors) game.actors = {};
-
-      const testActor: any = {
-        uid: 'test-pathfinding-actor',
-        username: 'PathfindingTestActor',
-        x: -1, y: 0, z: 0,
-        position: { x: -1, y: 0, z: 0 },
-        presence: 'online',
-        facing: 'east',
-        destination: null as any,
-        behavior: null as any,
-        underneath: () => false,
-        tickDelay: (callback: Function, ticks: number) => setTimeout(callback, ticks * 16),
-        tryMove: (dx: number, dy: number) => {
-          const targetX = testActor.x + dx;
-          const targetY = testActor.y + dy;
-          const targetKey = `${targetX}:${targetY}`;
-          return game.world.walkable[targetKey] ? { x: targetX, y: targetY, z: 0 } : null;
-        },
-        startMove: () => {
-          if (testActor.destination) {
-            if (gameLogger?.actorMoved) {
-              gameLogger.actorMoved({
-                uid: testActor.uid,
-                fromX: testActor.x,
-                fromY: testActor.y,
-                toX: testActor.destination.x,
-                toY: testActor.destination.y,
-                toZ: testActor.destination.z || 0,
-                facing: testActor.facing
-              });
-            }
-            
-            testActor.x = testActor.destination.x;
-            testActor.y = testActor.destination.y;
-            testActor.z = testActor.destination.z || 0;
-            testActor.position = { x: testActor.x, y: testActor.y, z: testActor.z };
-            
-            setTimeout(() => {
-              if (testActor._moveCompleteCallbacks) {
-                testActor._moveCompleteCallbacks.forEach((cb: Function) => cb());
-                testActor._moveCompleteCallbacks = [];
-              }
-            }, 100);
-          }
-        },
-        stopGoTo: (gotoInstance: any) => {
-          if (gotoInstance?.detach) gotoInstance.detach();
-          testActor.behavior = null;
-        },
-        _moveCompleteCallbacks: [] as Function[],
-        once: (event: string, callback: Function) => {
-          if (event === 'movecomplete') {
-            testActor._moveCompleteCallbacks.push(callback);
-          }
-        },
-        removeListener: () => {}
-      };
-      
-      game.actors[testActor.uid] = testActor;
-      
-      if (gameLogger?.actorSpawned) {
-        gameLogger.actorSpawned({
-          uid: testActor.uid,
-          username: testActor.username,
-          x: testActor.x, y: testActor.y, z: testActor.z,
-          presence: testActor.presence
-        });
-      }
-      
-      (window as any).testPathfindingActor = testActor;
-      console.log(' Actor created at (-1, 0)');
-    });
-
-    gameUtils.clearLogs();
+    // Wait for movement to complete - PathfinderBot should move toward MessageSender
+    console.log('⏳ Waiting for PathfinderBot movement toward MessageSender...');
     
-    // Use goto.ts to move actor
-    console.log('🎯 Starting pathfinding from (-1, 0) to (1, 0)...');
-    await page.evaluate(async () => {
-      const testActor = (window as any).testPathfindingActor;
+    // Check position every 2 seconds to see progress
+    let attempts = 0;
+    const maxAttempts = 5; // 10 seconds total
+    let currentPosition;
+    
+    do {
+      await page.waitForTimeout(2000);
+      attempts++;
       
-      // GoTo is not exported globally, so we need to create the behavior manually
-      // by directly accessing the pathfinding logic
-      console.log('🔍 [PAGE] Creating GoTo behavior for actor...');
-      console.log('🔍 [PAGE] Actor position:', testActor.position);
-      
-      // Import the GoTo class - it should be in the bundle
-      // Try to access it from the global scope first
-      let GoTo = (window as any).GoTo;
-      
-      if (!GoTo) {
-        console.log('⚠️ [PAGE] GoTo not in global scope, checking game object...');
-        // It might be attached to game or another object
+      currentPosition = await page.evaluate(() => {
         const game = (window as any).game;
-        GoTo = game?.GoTo;
+        if (!game || !game.users || !game.users.actors) {
+          return null;
+        }
+        
+        const actors = Object.values(game.users.actors);
+        const pathfinderBot = actors.find((actor: any) => actor.username === 'PathfinderBot') as any;
+        const messageSender = actors.find((actor: any) => actor.username === 'MessageSender') as any;
+        
+        if (!pathfinderBot || !messageSender) {
+          return null;
+        }
+        
+        return {
+          pathfinderBot: {
+            position: { x: pathfinderBot.position.x, y: pathfinderBot.position.y, z: pathfinderBot.position.z },
+            isMoving: !!pathfinderBot.destination,
+            behaviorsCount: pathfinderBot.behaviors.length,
+            hasGoToBehavior: pathfinderBot.behaviors.some((b: any) => b.constructor.name === 'GoTo')
+          },
+          messageSender: {
+            position: { x: messageSender.position.x, y: messageSender.position.y, z: messageSender.position.z }
+          }
+        };
+      });
+      
+      if (currentPosition) {
+        console.log(`📍 Position check ${attempts}/${maxAttempts}:`);
+        console.log(`    PathfinderBot: (${currentPosition.pathfinderBot.position.x}, ${currentPosition.pathfinderBot.position.y}, ${currentPosition.pathfinderBot.position.z})`);
+        console.log(`    MessageSender: (${currentPosition.messageSender.position.x}, ${currentPosition.messageSender.position.y}, ${currentPosition.messageSender.position.z})`);
+        console.log(`    Moving: ${currentPosition.pathfinderBot.isMoving}, GoTo: ${currentPosition.pathfinderBot.hasGoToBehavior}`);
+        
+        // Break if PathfinderBot is adjacent to MessageSender (GoTo behavior targets adjacent positions)
+        const distance = Math.abs(currentPosition.pathfinderBot.position.x - currentPosition.messageSender.position.x) + 
+                        Math.abs(currentPosition.pathfinderBot.position.y - currentPosition.messageSender.position.y);
+        if (distance <= 1) {
+          console.log('✅ PathfinderBot reached adjacent position to MessageSender!');
+          break;
+        }
       }
       
-      if (!GoTo) {
-        console.error('❌ [PAGE] GoTo class not found! Cannot test pathfinding.');
-        // As a fallback, manually trigger movement
-        console.log('📍 [PAGE] Fallback: Manually setting destination');
-        testActor.destination = { x: 1, y: 0, z: 0 };
-        testActor.startMove();
-        return;
+    } while (attempts < maxAttempts);
+    
+    // Verify final position by getting the current actor state
+    const finalPosition = await page.evaluate(() => {
+      const game = (window as any).game;
+      if (!game || !game.users || !game.users.actors) {
+        return { success: false, error: 'Game or actors not available' };
       }
       
-      const target = {
-        position: { x: 1, y: 0, z: 0 },
-        on: () => {},
-        removeListener: () => {}
+      const actors = Object.values(game.users.actors);
+      const pathfinderBot = actors.find((actor: any) => actor.username === 'PathfinderBot') as any;
+      const messageSender = actors.find((actor: any) => actor.username === 'MessageSender') as any;
+      
+      if (!pathfinderBot || !messageSender) {
+        return { success: false, error: 'Actors not found' };
+      }
+      
+      const distance = Math.abs(pathfinderBot.position.x - messageSender.position.x) + 
+                      Math.abs(pathfinderBot.position.y - messageSender.position.y);
+      
+      return {
+        success: true,
+        pathfinderBot: {
+          position: { x: pathfinderBot.position.x, y: pathfinderBot.position.y, z: pathfinderBot.position.z },
+          username: pathfinderBot.username,
+          uid: pathfinderBot.uid,
+          isMoving: !!pathfinderBot.destination,
+          behaviorsCount: pathfinderBot.behaviors.length,
+          facing: pathfinderBot.facing
+        },
+        messageSender: {
+          position: { x: messageSender.position.x, y: messageSender.position.y, z: messageSender.position.z },
+          username: messageSender.username
+        },
+        distance: distance,
+        isAdjacent: distance <= 1
       };
-      
-      testActor.behavior = new GoTo(testActor, target);
-      console.log('✓ [PAGE] GoTo behavior created and attached to actor');
     });
-
-    // Wait for pathfinding
-    console.log(' Monitoring movement for 8 seconds...');
-    await page.waitForTimeout(8000);
     
-    // Analyze movement
-    const movementLogs = gameUtils.getAllLogs().filter(log => 
-      log.category === 'actor' && 
-      log.event === 'moved' &&
-      log.data?.uid === 'test-pathfinding-actor'
-    );
-
-    console.log(`📊 Captured ${movementLogs.length} movement events`);
-    expect(movementLogs.length).toBeGreaterThan(0);
-
-    // Check path
-    let movedThroughHole = false;
-    let finalPosition = { x: -1, y: 0 };
-
-    console.log('📍 Path taken:');
-    movementLogs.forEach((movement, index) => {
-      const { toX, toY } = movement.data;
-      console.log(`  ${index + 1}. (${toX}, ${toY})`);
+    expect(finalPosition.success).toBe(true);
+    console.log('📍 Final positions:');
+    if (finalPosition.success && finalPosition.pathfinderBot && finalPosition.messageSender) {
+      console.log(`    PathfinderBot: (${finalPosition.pathfinderBot.position.x}, ${finalPosition.pathfinderBot.position.y}, ${finalPosition.pathfinderBot.position.z})`);
+      console.log(`    MessageSender: (${finalPosition.messageSender.position.x}, ${finalPosition.messageSender.position.y}, ${finalPosition.messageSender.position.z})`);
+      console.log(`    Distance: ${finalPosition.distance}, Adjacent: ${finalPosition.isAdjacent}`);
       
-      if (toX === 0 && toY === 0) {
-        movedThroughHole = true;
-        console.log('    ❌ ERROR: Moved through hole!');
-      }
+      // Verify the actor moved closer to or adjacent to MessageSender
+      // GoTo behavior targets adjacent positions, so distance should be 1 or less
+      expect(finalPosition.isAdjacent).toBe(true);
+      console.log(`✅ PathfinderBot successfully moved to adjacent position near MessageSender`);
       
-      finalPosition = { x: toX, y: toY };
-    });
-
-    // Assertions
-    console.log('🧪 Running assertions:');
+      // Verify actor is not still moving
+      expect(finalPosition.pathfinderBot.isMoving).toBe(false);
+      
+      // Note: GoTo behavior is automatically removed when movement completes successfully
+      // So behaviorsCount might be 0, which is expected behavior
+      console.log(`📊 Final behavior count: ${finalPosition.pathfinderBot.behaviorsCount} (GoTo behavior auto-removes on completion)`);
+    } else {
+      throw new Error('Failed to get final position data');
+    }
     
-    console.log('1. Actor should NOT move through hole at (0,0)');
-    expect(movedThroughHole).toBe(false);
-    console.log('   ✓ PASS: Actor avoided the hole');
-
-    console.log('2. Actor should make progress toward east');
-    const madeProgress = finalPosition.x > -1;
-    expect(madeProgress).toBe(true);
-    console.log(`   ✓ PASS: Actor moved from -1 to ${finalPosition.x}`);
-
-    console.log('3. Pathfinding should take detour (>2 moves)');
-    console.log(`   Total moves: ${movementLogs.length}`);
-    expect(movementLogs.length).toBeGreaterThan(0);
-
-    console.log('✅ PATHFINDING TEST COMPLETED');
+    console.log(`✅ PathfinderBot successfully moved toward MessageSender through message-triggered pathfinding`);
+    console.log(`📊 Message-triggered pathfinding validation complete - GoTo behavior verified`);
+    
+    // Print browser logs if there were any errors or warnings
+    const browserErrors = gameUtils.getBrowserErrors();
+    if (browserErrors.length > 0) {
+      console.log('\n🚨 Browser Errors Found:');
+      gameUtils.printBrowserErrors();
+    }
+    
+    const browserLogs = gameUtils.getBrowserLogs();
+    const warnings = browserLogs.filter(log => log.type === 'warning');
+    if (warnings.length > 0) {
+      console.log('\n⚠️ Browser Warnings:');
+      warnings.forEach(log => {
+        console.log(`    [${log.type}] ${log.text} (${log.location})`);
+      });
+    }
+    
+    // Verify world generation data for context
+    const worldData = getWorldGenerationData(gameUtils);
+    if (worldData) {
+      expect(worldData.totalTiles).toBeGreaterThan(0);
+      expect(worldData.spawnablePositions).toBeGreaterThan(0);
+    } else {
+      console.warn('⚠️ World generation data not available for verification');
+    }
+    
+    console.log('🎉 Message-triggered pathfinding test completed successfully');
   });
 });

@@ -227,7 +227,14 @@ export function getMockWorldGenerationScript() {
         
         console.log(`✅ [WORLD MOCK] Created ${tileCount} slabs across ${configData.islands?.length || 0} islands (${skippedCount} void positions)`);
         
-        // Initialize static map and islands
+        // Call geometry.generateClosestGrids to initialize pathfinding arrays
+      console.log('🔧 [WORLD MOCK] Generating closest grids...');
+      if ((window as any).__WorldDependencies && (window as any).__WorldDependencies.geometry) {
+        (window as any).__WorldDependencies.geometry.generateClosestGrids(mockWorldSize);
+        console.log(`✅ [WORLD MOCK] Generated ${(window as any).__WorldDependencies.geometry.closestGrids.length} closest grid positions`);
+      }
+      
+      // Initialize static map and islands
         this.staticMap = [];
         this.islands = [];
         this.mainIsland = 0;
