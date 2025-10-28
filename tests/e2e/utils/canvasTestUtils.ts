@@ -13,6 +13,14 @@ export interface GameLogEvent {
   data?: any;
 }
 
+export interface BrowserConsoleLog {
+  timestamp: number;
+  type: 'log' | 'info' | 'warning' | 'error' | 'debug' | 'trace' | 'dir' | 'dirxml' | 'table' | 'clear' | 'startGroup' | 'startGroupCollapsed' | 'endGroup' | 'assert' | 'profile' | 'profileEnd' | 'count' | 'timeEnd';
+  text: string;
+  location?: string;
+  args?: any[];
+}
+
 export interface ActorState {
   uid: string;
   username: string;
@@ -37,6 +45,7 @@ export interface GameState {
  */
 export class CanvasGameTestUtils {
   private logs: GameLogEvent[] = [];
+  private browserLogs: BrowserConsoleLog[] = [];
   private gameState: GameState = {
     initialized: false,
     actorCount: 0,
@@ -50,14 +59,41 @@ export class CanvasGameTestUtils {
    */
   async startLogCapture(): Promise<void> {
     this.logs = [];
+    this.browserLogs = [];
     
+    // Capture console messages
     this.page.on('console', (msg) => {
+      const timestamp = Date.now();
+      const type = msg.type();
+      const text = msg.text();
+      const location = msg.location();
+      
+      // Capture ALL browser console logs for debugging
+      this.browserLogs.push({
+        timestamp,
+        type: type as any,
+        text,
+        location: location ? `${location.url}:${location.lineNumber}:${location.columnNumber}` : undefined,
+        args: msg.args().map(arg => arg.toString())
+      });
+      
+      // Log important browser console messages to test output
+      if (type === 'error') {
+        console.error(`🔴 [BROWSER ERROR] ${text}`);
+        if (location) {
+          console.error(`   at ${location.url}:${location.lineNumber}:${location.columnNumber}`);
+        }
+      } else if (type === 'warning') {
+        console.warn(`🟡 [BROWSER WARN] ${text}`);
+      } else if (text.includes('crash') || text.includes('error') || text.includes('exception')) {
+        console.log(`🔍 [BROWSER] ${type.toUpperCase()}: ${text}`);
+      }
+      
       try {
-        const text = msg.text();
-        
         // Look for structured game logs (JSON format)
         if (text.startsWith('[GAME_LOG]')) {
           const pinoLogData = JSON.parse(text.replace('[GAME_LOG]', '').trim());
+          
           // Extract the actual log data from pino's structure
           // pino logs have this structure: { ts, messages: [data, message], bindings, level }
           const messages = pinoLogData.messages || [];
@@ -66,9 +102,35 @@ export class CanvasGameTestUtils {
             if (logData.category && logData.event) {
               // Extract category and event, everything else goes in data
               const { category, event, timestamp, ...data } = logData;
+              
+              // Extract log level from the pino log structure
+              // The pino log level can be extracted from the log event or default to 'info'
+              let level = 'info';
+              if (pinoLogData.level !== undefined) {
+                if (typeof pinoLogData.level === 'object' && pinoLogData.level.label) {
+                  // Pino level object with label property
+                  level = pinoLogData.level.label;
+                } else if (typeof pinoLogData.level === 'number') {
+                  // Map pino level numbers to level names
+                  // 10: trace, 20: debug, 30: info, 40: warn, 50: error, 60: fatal
+                  const levelMap: { [key: number]: string } = {
+                    10: 'trace',
+                    20: 'debug', 
+                    30: 'info',
+                    40: 'warn',
+                    50: 'error',
+                    60: 'fatal'
+                  };
+                  level = levelMap[pinoLogData.level] || 'info';
+                } else if (typeof pinoLogData.level === 'string') {
+                  // Direct string level
+                  level = pinoLogData.level;
+                }
+              }
+              
               this.logs.push({
                 timestamp: Date.now(),
-                level: 'info',
+                level: level as 'info' | 'debug' | 'warn' | 'error',
                 category,
                 event,
                 data
@@ -82,6 +144,37 @@ export class CanvasGameTestUtils {
       } catch (error) {
         // Ignore non-JSON logs
       }
+    });
+
+    // Capture page errors (unhandled JavaScript errors)
+    this.page.on('pageerror', (error) => {
+      const timestamp = Date.now();
+      console.error(`💥 [PAGE ERROR] ${error.message}`);
+      console.error(`   Stack: ${error.stack}`);
+      
+      // Add as a browser log entry
+      this.browserLogs.push({
+        timestamp,
+        type: 'error',
+        text: `PAGE ERROR: ${error.message}`,
+        location: error.stack ? error.stack.split('\n')[1] : undefined,
+        args: [error.stack]
+      });
+    });
+
+    // Capture request failures
+    this.page.on('requestfailed', (request) => {
+      const timestamp = Date.now();
+      const failure = request.failure();
+      console.warn(`🔗 [REQUEST FAILED] ${request.url()}: ${failure?.errorText || 'Unknown error'}`);
+      
+      // Add as a browser log entry
+      this.browserLogs.push({
+        timestamp,
+        type: 'warning',
+        text: `REQUEST FAILED: ${request.url()} - ${failure?.errorText || 'Unknown error'}`,
+        location: request.url()
+      });
     });
   }
 
@@ -193,6 +286,91 @@ export class CanvasGameTestUtils {
   getRecentLogs(seconds: number = 5): GameLogEvent[] {
     const cutoff = Date.now() - (seconds * 1000);
     return this.logs.filter(log => log.timestamp > cutoff);
+  }
+
+  /**
+   * Get all browser console logs
+   */
+  getBrowserLogs(): BrowserConsoleLog[] {
+    return [...this.browserLogs];
+  }
+
+  /**
+   * Get browser console logs by type
+   */
+  getBrowserLogsByType(type: 'log' | 'info' | 'warning' | 'error' | 'debug'): BrowserConsoleLog[] {
+    return this.browserLogs.filter(log => log.type === type);
+  }
+
+  /**
+   * Get browser console errors
+   */
+  getBrowserErrors(): BrowserConsoleLog[] {
+    return this.getBrowserLogsByType('error');
+  }
+
+  /**
+   * Get browser console warnings
+   */
+  getBrowserWarnings(): BrowserConsoleLog[] {
+    return this.browserLogs.filter(log => log.type === 'warning');
+  }
+
+  /**
+   * Get recent browser logs (last N seconds)
+   */
+  getRecentBrowserLogs(seconds: number = 10): BrowserConsoleLog[] {
+    const cutoff = Date.now() - (seconds * 1000);
+    return this.browserLogs.filter(log => log.timestamp > cutoff);
+  }
+
+  /**
+   * Print all browser console logs to test output
+   */
+  printBrowserLogs(): void {
+    console.log('\n📋 Browser Console Logs:');
+    this.browserLogs.forEach((log, index) => {
+      const time = new Date(log.timestamp).toTimeString().slice(0, 8);
+      const emoji = log.type === 'error' ? '🔴' : log.type === 'warning' ? '🟡' : '🔵';
+      console.log(`${emoji} [${time}] ${log.type.toUpperCase()}: ${log.text}`);
+      if (log.location) {
+        console.log(`   at ${log.location}`);
+      }
+    });
+  }
+
+  /**
+   * Print browser errors and warnings to test output
+   */
+  printBrowserErrors(): void {
+    const errors = this.getBrowserErrors();
+    const warnings = this.getBrowserWarnings();
+    
+    if (errors.length > 0) {
+      console.log('\n🔴 Browser Errors:');
+      errors.forEach(log => {
+        const time = new Date(log.timestamp).toTimeString().slice(0, 8);
+        console.log(`[${time}] ${log.text}`);
+        if (log.location) {
+          console.log(`   at ${log.location}`);
+        }
+      });
+    }
+    
+    if (warnings.length > 0) {
+      console.log('\n🟡 Browser Warnings:');
+      warnings.forEach(log => {
+        const time = new Date(log.timestamp).toTimeString().slice(0, 8);
+        console.log(`[${time}] ${log.text}`);
+        if (log.location) {
+          console.log(`   at ${log.location}`);
+        }
+      });
+    }
+    
+    if (errors.length === 0 && warnings.length === 0) {
+      console.log('✅ No browser errors or warnings found');
+    }
   }
 
   /**

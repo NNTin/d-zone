@@ -18,6 +18,7 @@ import pino from 'pino';
 const isProduction = typeof process !== 'undefined' && process.env.NODE_ENV === 'production';
 const isTesting = typeof process !== 'undefined' && (process.env.NODE_ENV === 'test' || process.env.CI === 'true');
 const isE2ETesting = typeof window !== 'undefined' && window.location.search.includes('e2e-test=true');
+const isDebugMode = typeof window !== 'undefined' && window.location.search.includes('debug=true');
 
 // Logger configuration
 const logger = pino({
@@ -27,8 +28,8 @@ const logger = pino({
     transmit: {
       level: 'debug',
       send: function (level, logEvent) {
-        // In browser, emit structured logs for E2E test capture
-        if (typeof window !== 'undefined' && (isTesting || isE2ETesting)) {
+        // In browser, emit structured logs for E2E test capture or debug mode
+        if (typeof window !== 'undefined' && (isTesting || isE2ETesting || isDebugMode)) {
           console.log(`[GAME_LOG] ${JSON.stringify(logEvent)}`);
         }
       }
@@ -61,6 +62,13 @@ class GameLogger {
    */
   isEnabled(): boolean {
     return this.enabled;
+  }
+
+  /**
+   * Check if debug mode is enabled
+   */
+  isDebugMode(): boolean {
+    return isDebugMode;
   }
 
   // ===========================================
@@ -149,6 +157,31 @@ class GameLogger {
     }, `Spawn analysis: ${data.validSpawnPositions} valid, ${data.invalidSpawnPositions} invalid positions`);
   }
 
+  /**
+   * World tile map created
+   */
+  worldTileMap(data: {
+    totalTiles: number;
+    uniqueTileCodes: number;
+    tilesByCode: Record<string, number>;
+    gridTileTypes: Record<string, string>;
+    tileMap: Record<string, { 
+      tileCode: string; 
+      x: number; 
+      y: number; 
+      z: number;
+      grid: string;
+    }>;
+  }): void {
+    if (!this.enabled) return;
+    this.baseLogger.info({
+      category: 'world',
+      event: 'tile_map',
+      timestamp: Date.now(),
+      ...data
+    }, `Tile map created: ${data.totalTiles} tiles, ${data.uniqueTileCodes} unique tile codes`);
+  }
+
   // ===========================================
   // ACTOR SYSTEM EVENTS
   // ===========================================
@@ -179,11 +212,15 @@ class GameLogger {
    */
   actorMoved(data: { 
     uid: string; 
-    username?: string;
-    x: number; 
-    y: number; 
+    username: string;
+    fromX: number;
+    fromY: number;
+    fromZ: number;
+    toX: number; 
+    toY: number; 
+    toZ: number;
+    movementType: 'relative' | 'absolute';
     facing?: string;
-    isMoving?: boolean;
   }): void {
     if (!this.enabled) return;
     this.baseLogger.debug({
@@ -191,7 +228,25 @@ class GameLogger {
       event: 'moved',
       timestamp: Date.now(),
       ...data
-    }, `Actor moved: ${data.username || data.uid} to (${data.x}, ${data.y})`);
+    }, `Actor moved: ${data.username} from (${data.fromX}, ${data.fromY}, ${data.fromZ}) to (${data.toX}, ${data.toY}, ${data.toZ})`);
+  }
+
+  /**
+   * Actor goto command issued
+   */
+  actorGoto(data: {
+    uid?: string;
+    username: string;
+    targetX: number;
+    targetY: number;
+  }): void {
+    if (!this.enabled) return;
+    this.baseLogger.debug({
+      category: 'actor',
+      event: 'goto',
+      timestamp: Date.now(),
+      ...data
+    }, `Actor goto command: ${data.username} -> (${data.targetX}, ${data.targetY})`);
   }
 
   /**
@@ -224,6 +279,79 @@ class GameLogger {
       timestamp: Date.now(),
       ...data
     }, `Actor updated: ${data.username || data.uid}`);
+  }
+
+  /**
+   * Actor animation started
+   */
+  actorAnimationStarted(data: {
+    uid: string;
+    username: string;
+    animationType: 'hopping' | 'talking' | 'idle' | 'wander';
+    state: string;
+    facing: string;
+    frame: number;
+    destination?: { x: number; y: number; z: number };
+  }): void {
+    if (!this.enabled) return;
+    this.baseLogger.debug({
+      category: 'actor',
+      event: 'animationStarted',
+      timestamp: Date.now(),
+      ...data
+    }, `Actor animation started: ${data.username} - ${data.animationType} (${data.state})`);
+  }
+
+  /**
+   * Actor animation finished
+   */
+  actorAnimationFinished(data: {
+    uid: string;
+    username: string;
+    animationType: 'hopping' | 'talking' | 'idle' | 'wander';
+    state: string;
+    facing: string;
+    finalFrame: number;
+    position: { x: number; y: number; z: number };
+  }): void {
+    if (!this.enabled) return;
+    this.baseLogger.debug({
+      category: 'actor',
+      event: 'animationFinished',
+      timestamp: Date.now(),
+      ...data
+    }, `Actor animation finished: ${data.username} - ${data.animationType} at (${data.position.x}, ${data.position.y})`);
+  }
+
+  /**
+   * Actor sprite rendered to canvas
+   */
+  actorSpriteRendered(data: {
+    uid: string;
+    username: string;
+    state: string;
+    facing: string;
+    frame: number;
+    spriteMetrics: {
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      ox: number;
+      oy: number;
+    };
+    image: string | string[];
+    presence: string;
+    talking: boolean;
+    moving: boolean;
+  }): void {
+    if (!this.enabled) return;
+    this.baseLogger.debug({
+      category: 'actor',
+      event: 'spriteRendered',
+      timestamp: Date.now(),
+      ...data
+    }, `Actor sprite rendered: ${data.username} - ${data.state}/${data.facing} (${data.presence})`);
   }
 
   // ===========================================
@@ -563,8 +691,23 @@ class GameLogger {
 // Create and export the game logger instance
 export const gameLogger = new GameLogger(logger);
 
+// Expose gameLogger on window for E2E tests and debug mode
+if (typeof window !== 'undefined' && ((window as any).__E2E_TEST_MODE || isDebugMode)) {
+  (window as any).gameLogger = gameLogger;
+  console.log('✅ [DEBUG/E2E] gameLogger exposed on window.gameLogger');
+}
+
+// Expose debug mode flag for easy access
+if (typeof window !== 'undefined' && isDebugMode) {
+  (window as any).__DEBUG_MODE = true;
+  console.log('🐛 [DEBUG] Debug mode enabled - walkable tiles will be highlighted');
+}
+
 // Export the base logger for special cases
 export { logger as baseLogger };
+
+// Export debug mode flag
+  export { isDebugMode };
 
 // Export types for TypeScript support
     export type {

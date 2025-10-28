@@ -73,6 +73,7 @@ export default class World extends EventEmitter {
     mainIsland: number = 0;
     tileMap: Record<string, Tile> = {};
     initializationPromise: Promise<void>;
+    private debugOverlayRefreshScheduled: boolean = false;
 
     constructor(game: Game, worldSize: number) {
         super();
@@ -99,7 +100,20 @@ export default class World extends EventEmitter {
             TileClass = TileModule.default;
             TileSheetClass = TileSheetModule.default;
             PathfinderClass = PathfinderModule.default;
-            this.generateWorld();
+            
+            // Expose classes for E2E testing
+            if (typeof window !== 'undefined' && (window as any).__E2E_TEST_MODE) {
+                (window as any).__WorldDependencies = {
+                    Slab: SlabClass,
+                    Tile: TileClass,
+                    TileSheet: TileSheetClass,
+                    Pathfinder: PathfinderClass,
+                    geometry: geometry
+                };
+                console.log('✅ [E2E] World dependencies exposed');
+            }
+            
+            // Note: generateWorld() is now called explicitly from main.ts after init completes
         } catch (error) {
             gameLogger.error('World: Failed to load world dependencies', {
                 error: error instanceof Error ? error.message : String(error),
@@ -110,7 +124,7 @@ export default class World extends EventEmitter {
         }
     }
 
-    private generateWorld(): void {
+    generateWorld(): void {
         geometry.generateClosestGrids(this.worldSize);
         
         testCanvas.clear();
@@ -155,6 +169,11 @@ export default class World extends EventEmitter {
         this.createTiles(); // Create map tiles from grid intersections
         
         this.createBackground();
+        
+        // Add debug overlay if debug mode is enabled
+        if (gameLogger.isDebugMode()) {
+            this.createDebugOverlay();
+        }
         
         PathfinderClass.loadMap(this.walkable);
         unoccupiedGrids = Object.keys(this.map);
@@ -276,6 +295,193 @@ export default class World extends EventEmitter {
         this.game.renderer.bgCanvas = {
             x: lowestScreenX, y: lowestScreenY, image: bgCanvas.canvas
         };
+    }
+
+    // Debounced refresh to avoid double-drawing during move (remove + add)
+    private scheduleDebugOverlayRefresh(): void {
+        if (!gameLogger.isDebugMode()) return;
+        if (this.debugOverlayRefreshScheduled) return;
+        this.debugOverlayRefreshScheduled = true;
+        const run = () => {
+            try {
+                // Rebuild background, then paint overlay on top
+                this.createBackground();
+                this.createDebugOverlay();
+            } catch (e) {
+                gameLogger.warn('Debug: Overlay refresh failed', { error: (e as Error)?.message });
+            } finally {
+                this.debugOverlayRefreshScheduled = false;
+            }
+        };
+        if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+            window.requestAnimationFrame(run);
+        } else {
+            setTimeout(run, 0);
+        }
+    }
+
+    private createDebugOverlay(): void {
+        if (!this.game.renderer.bgCanvas) {
+            gameLogger.warn('Debug: Cannot create debug overlay - no background canvas available');
+            return;
+        }
+
+        gameLogger.info('Debug: Creating walkable tile overlay');
+        
+        // Get the existing background canvas
+        const bgCanvas = this.game.renderer.bgCanvas;
+        const canvas = bgCanvas.image;
+        const ctx = canvas.getContext('2d');
+        
+        if (!ctx) {
+            gameLogger.error('Debug: Cannot get canvas context for debug overlay');
+            return;
+        }
+
+        // Set drawing style for debug markers
+        ctx.strokeStyle = '#FF0000'; // Red color for walkable tiles
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.8;
+
+        let walkableCount = 0;
+        let actorCount = 0; 
+        let totalTiles = 0;
+
+        // Iterate through all map positions and draw X marks on walkable tiles
+        for (const gridKey in this.map) {
+            if (!this.map.hasOwnProperty(gridKey)) continue;
+            
+            const slab = this.map[gridKey];
+            const x = slab.position.x;
+            const y = slab.position.y;
+            totalTiles++;
+            
+            // Determine if this tile is occupied by an Actor
+            let actorHere = false;
+            const yObjects = this.objects[x]?.[y];
+            if (yObjects) {
+                for (const zKey in yObjects) {
+                    if (!yObjects.hasOwnProperty(zKey)) continue;
+                    const obj: any = yObjects[zKey];
+                    if (obj && obj.constructor && obj.constructor.name === 'Actor') {
+                        actorHere = true;
+                        break;
+                    }
+                }
+            }
+
+            // Convert world coordinates to screen coordinates (tile center)
+            // Use the same isometric transform as actors, then adjust by bgCanvas origin
+            const z = slab.position.z;
+            const eastShift = 8; // slight eastward pixel tweak for alignment
+            const centerX = ((x - y) * 16 - 8 + eastShift) - bgCanvas.x;
+            const centerY = ((x + y) * 8 - (z) * 16 - 8) - bgCanvas.y;
+            const size = 4; // Size of the X mark
+
+            if (actorHere) {
+                // Draw blue marker for actor-occupied tiles (even if temporarily unwalkable)
+                actorCount++;
+                ctx.strokeStyle = '#007BFF';
+                ctx.beginPath();
+                ctx.moveTo(centerX - size, centerY - size);
+                ctx.lineTo(centerX + size, centerY + size);
+                ctx.moveTo(centerX + size, centerY - size);
+                ctx.lineTo(centerX - size, centerY + size);
+                ctx.stroke();
+                // Restore default red for subsequent tiles
+                ctx.strokeStyle = '#FF0000';
+            } else if (this.canWalk(x, y)) {
+                // Draw red marker for walkable tiles without actors
+                walkableCount++;
+                ctx.beginPath();
+                ctx.moveTo(centerX - size, centerY - size);
+                ctx.lineTo(centerX + size, centerY + size);
+                ctx.moveTo(centerX + size, centerY - size);
+                ctx.lineTo(centerX - size, centerY + size);
+                ctx.stroke();
+            }
+        }
+
+        // Draw isometric compass (N/E/S/W) to indicate world directions on screen
+        // In isometric projection used here:
+        //  - North (0,-1) maps to roughly up-right (dx=+16, dy=-8)
+        //  - East  (+1,0) maps to down-right (dx=+16, dy=+8)
+        //  - South (0,+1) maps to down-left (dx=-16, dy=+8)
+        //  - West  (-1,0) maps to up-left (dx=-16, dy=-8)
+        try {
+            const originX = 40;
+            const originY = 40;
+            const scale = 3; // enlarge the directional vectors for visibility
+
+            // Save state for compass styling
+            ctx.save();
+            ctx.globalAlpha = 0.95;
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#00AAFF';
+            ctx.fillStyle = '#00AAFF';
+            ctx.font = '12px sans-serif';
+
+            // Helper to draw an arrow from (x1,y1) to (x2,y2)
+            const drawArrow = (x1: number, y1: number, x2: number, y2: number) => {
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.stroke();
+                // Arrow head
+                const angle = Math.atan2(y2 - y1, x2 - x1);
+                const headLen = 6;
+                ctx.beginPath();
+                ctx.moveTo(x2, y2);
+                ctx.lineTo(x2 - headLen * Math.cos(angle - Math.PI / 6), y2 - headLen * Math.sin(angle - Math.PI / 6));
+                ctx.lineTo(x2 - headLen * Math.cos(angle + Math.PI / 6), y2 - headLen * Math.sin(angle + Math.PI / 6));
+                ctx.lineTo(x2, y2);
+                ctx.fill();
+            };
+
+            // Direction vectors (screen deltas per grid step)
+            const dirs = {
+                N: { dx: 16, dy: -8 },
+                E: { dx: 16, dy: 8 },
+                S: { dx: -16, dy: 8 },
+                W: { dx: -16, dy: -8 }
+            } as const;
+
+            // Draw crosshair at origin
+            ctx.beginPath();
+            ctx.arc(originX, originY, 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw arrows and labels
+            const endN = { x: originX + dirs.N.dx * scale, y: originY + dirs.N.dy * scale };
+            const endE = { x: originX + dirs.E.dx * scale, y: originY + dirs.E.dy * scale };
+            const endS = { x: originX + dirs.S.dx * scale, y: originY + dirs.S.dy * scale };
+            const endW = { x: originX + dirs.W.dx * scale, y: originY + dirs.W.dy * scale };
+            drawArrow(originX, originY, endN.x, endN.y);
+            drawArrow(originX, originY, endE.x, endE.y);
+            drawArrow(originX, originY, endS.x, endS.y);
+            drawArrow(originX, originY, endW.x, endW.y);
+
+            // Labels slightly past arrow tips
+            ctx.fillText('N', endN.x + 6, endN.y - 2);
+            ctx.fillText('E', endE.x + 6, endE.y + 12);
+            ctx.fillText('S', endS.x - 14, endS.y + 12);
+            ctx.fillText('W', endW.x - 14, endW.y - 2);
+
+            // Restore context state after compass
+            ctx.restore();
+        } catch (e) {
+            gameLogger.warn('Debug: Failed to draw compass overlay', { error: (e as Error)?.message });
+        }
+
+        // Reset alpha
+        ctx.globalAlpha = 1.0;
+
+        gameLogger.info('Debug: Walkable tile overlay complete', {
+            totalTiles: totalTiles,
+            walkableTiles: walkableCount,
+            unwalkableTiles: totalTiles - walkableCount,
+            actorTiles: actorCount
+        });
     }
 
     crawlMap(): void {
@@ -472,8 +678,60 @@ export default class World extends EventEmitter {
         }
         this.staticMap.sort(function(a, b) { return a.zDepth - b.zDepth; });
         
+        // Log tile map for E2E testing
+        this.logTileMap();
+        
         // Log valid spawn positions for E2E testing
         this.logValidSpawnPositions();
+    }
+
+    private logTileMap(): void {
+        // Create complete tile map data for E2E testing
+        const completeTileMap: Record<string, { 
+            tileCode: string; 
+            x: number; 
+            y: number; 
+            z: number;
+            grid: string;
+        }> = {};
+        
+        const tileCodeCounts: Record<string, number> = {};
+        
+        for (const tileGrid in this.tileMap) {
+            if (!this.tileMap.hasOwnProperty(tileGrid)) continue;
+            
+            const tile = this.tileMap[tileGrid] as any; // Access the generated tile data
+            const tileCode = tile.tileCode || 'UNKNOWN';
+            const position = tile.position;
+            
+            // Store complete tile information
+            completeTileMap[tileGrid] = {
+                tileCode: tileCode,
+                x: position.x,
+                y: position.y,
+                z: position.z,
+                grid: tileGrid
+            };
+            
+            // Count tile codes for summary
+            tileCodeCounts[tileCode] = (tileCodeCounts[tileCode] || 0) + 1;
+        }
+        
+        // Also create a simple grid-based representation showing what tile type is at each coordinate
+        const gridTileTypes: Record<string, string> = {};
+        for (const gridKey in this.map) {
+            if (!this.map.hasOwnProperty(gridKey)) continue;
+            const slab = this.map[gridKey];
+            gridTileTypes[gridKey] = slab.style; // grass, plain, or flowers
+        }
+        
+        gameLogger.worldTileMap({
+            totalTiles: Object.keys(this.tileMap).length,
+            uniqueTileCodes: Object.keys(tileCodeCounts).length,
+            tilesByCode: tileCodeCounts,
+            gridTileTypes: gridTileTypes, // Map of "x:y" -> "grass"|"plain"|"flowers"
+            tileMap: completeTileMap // Complete tile map: "z:x:y" -> { tileCode, x, y, z, grid }
+        });
     }
 
     private logValidSpawnPositions(): void {
@@ -534,6 +792,10 @@ export default class World extends EventEmitter {
         }
         this.objects[obj.position.x][obj.position.y][obj.position.z] = obj;
         this.updateWalkable(obj.position.x, obj.position.y);
+        // If an Actor is added, refresh debug overlay (in debug mode)
+        if ((obj as any)?.constructor?.name === 'Actor') {
+            this.scheduleDebugOverlayRefresh();
+        }
         return true;
     }
 
@@ -541,6 +803,10 @@ export default class World extends EventEmitter {
         if (this.objects[obj.position.x]?.[obj.position.y]?.[obj.position.z]) {
             delete this.objects[obj.position.x][obj.position.y][obj.position.z];
             this.updateWalkable(obj.position.x, obj.position.y);
+            // If an Actor is removed, refresh debug overlay (in debug mode)
+            if ((obj as any)?.constructor?.name === 'Actor') {
+                this.scheduleDebugOverlayRefresh();
+            }
         }
     }
 
@@ -550,6 +816,7 @@ export default class World extends EventEmitter {
         obj.position.y = y;
         obj.position.z = z;
         this.addToWorld(obj);
+        // Do not trigger here to avoid double refresh; add/remove already schedule a refresh
     }
 
     updateWalkable(x: number, y: number): void {
@@ -647,5 +914,21 @@ export default class World extends EventEmitter {
             }
         }
         return null;
+    }
+}
+
+// Expose World class for E2E testing as soon as it's defined
+if (typeof window !== 'undefined' && (window as any).__E2E_TEST_MODE) {
+    (window as any).__WorldClass = World;
+    
+    // Expose unoccupiedGrids for testing and mocking
+    (window as any).__unoccupiedGrids = () => unoccupiedGrids;
+    (window as any).__setUnoccupiedGrids = (grids: string[]) => { unoccupiedGrids = grids; };
+    
+    console.log('✅ [E2E] World class exposed on window.__WorldClass');
+    
+    // Dispatch event so mocks can patch immediately (synchronously)
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('__worldClassReady', { detail: { World } }));
     }
 }
