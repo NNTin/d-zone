@@ -358,6 +358,7 @@ export default class Actor extends WorldObject {
         this.sprite.metrics = metrics;
         
         // Set image with role color support
+        let finalImage: string | string[];
         if (this.roleColor) {
             // Ensure colored sprite exists
             const game = this.game as any;
@@ -367,15 +368,32 @@ export default class Actor extends WorldObject {
                     sheet: 'actors',
                     alpha: 1
                 });
-                this.sprite.image = [this.roleColor, 'actors'];
+                finalImage = [this.roleColor, 'actors'];
+                this.sprite.image = finalImage;
             } else {
                 // Game/renderer not available yet, use base image for now
                 // Will be updated when addToGame is called
-                this.sprite.image = 'actors';
+                finalImage = 'actors';
+                this.sprite.image = finalImage;
             }
         } else {
-            this.sprite.image = 'actors';
+            finalImage = 'actors';
+            this.sprite.image = finalImage;
         }
+        
+        // Log sprite rendering
+        gameLogger.actorSpriteRendered({
+            uid: this.uid,
+            username: this.username,
+            state: state,
+            facing: facing,
+            frame: this.frame || 0,
+            spriteMetrics: metrics,
+            image: finalImage,
+            presence: this.presence,
+            talking: this.talking,
+            moving: !!this.destination
+        });
     }
 
     tryMove(x: number, y: number): any {
@@ -515,6 +533,17 @@ export default class Actor extends WorldObject {
         // Initialize frame animation
         this.frame = 0;
         
+        // Log animation start
+        gameLogger.actorAnimationStarted({
+            uid: this.uid,
+            username: this.username,
+            animationType: 'hopping',
+            state: 'hopping',
+            facing: this.facing,
+            frame: this.frame,
+            destination: this.destination
+        });
+        
         const animation = this.sheet.map['hopping'].animation;
         const halfZDepth = (this.position.x + this.position.y + (this.destDelta.x + this.destDelta.y) / 2);
         
@@ -560,6 +589,17 @@ export default class Actor extends WorldObject {
                 }
                 this.unWalkable = false;
                 
+                // Log animation finished
+                gameLogger.actorAnimationFinished({
+                    uid: this.uid,
+                    username: this.username,
+                    animationType: 'hopping',
+                    state: 'hopping',
+                    facing: this.facing,
+                    finalFrame: this.frame,
+                    position: { x: this.destination.x, y: this.destination.y, z: this.destination.z }
+                });
+                
                 // Move to destination (absolute positioning)
                 this.move(this.destination.x, this.destination.y, this.destination.z, true);
                 this.destination = false;
@@ -578,6 +618,13 @@ export default class Actor extends WorldObject {
     }
 
     move(x: number, y: number, z?: number, absolute?: boolean): void {
+        // Store previous position for logging
+        const previousPosition = {
+            x: this.position.x,
+            y: this.position.y,
+            z: this.position.z
+        };
+        
         // Validate input parameters
         if (isNaN(x) || isNaN(y) || (typeof z !== 'undefined' && isNaN(z))) {
             gameLogger.error('Actor move: Invalid coordinates provided', {
@@ -606,8 +653,36 @@ export default class Actor extends WorldObject {
             } else {
                 super.move(x, y, 0);
             }
+            
+            // Log the movement for relative moves
+            gameLogger.actorMoved({
+                uid: this.uid,
+                username: this.username,
+                fromX: previousPosition.x,
+                fromY: previousPosition.y,
+                fromZ: previousPosition.z,
+                toX: this.position.x,
+                toY: this.position.y,
+                toZ: this.position.z,
+                movementType: 'relative',
+                facing: this.facing
+            });
             return; // super.move handles everything including screen updates
         }
+        
+        // Log the movement for absolute moves
+        gameLogger.actorMoved({
+            uid: this.uid,
+            username: this.username,
+            fromX: previousPosition.x,
+            fromY: previousPosition.y,
+            fromZ: previousPosition.z,
+            toX: this.position.x,
+            toY: this.position.y,
+            toZ: this.position.z,
+            movementType: 'absolute',
+            facing: this.facing
+        });
         
         // Validate final position
         if (isNaN(this.position.x) || isNaN(this.position.y) || isNaN(this.position.z)) {
@@ -633,8 +708,29 @@ export default class Actor extends WorldObject {
         this.messageBox = new TextBox(this as any, message, true);
         this.messageBox.addToGame(this.game);
         
+        // Log talking animation start
+        gameLogger.actorAnimationStarted({
+            uid: this.uid,
+            username: this.username,
+            animationType: 'talking',
+            state: 'online',
+            facing: this.facing,
+            frame: 0
+        });
+        
         const self = this;
         this.messageBox.scrollMessage(function() {
+            // Log talking animation finished
+            gameLogger.actorAnimationFinished({
+                uid: self.uid,
+                username: self.username,
+                animationType: 'talking',
+                state: 'online',
+                facing: self.facing,
+                finalFrame: 0,
+                position: { x: self.position.x, y: self.position.y, z: self.position.z }
+            });
+            
             delete self.messageBox;
             self.talking = false;
             // Don't automatically show nametag after talking - let onUpdate handle visibility based on mouse hover
@@ -674,11 +770,6 @@ export default class Actor extends WorldObject {
     }
 
     goto(x: number, y: number): void {
-        gameLogger.debug('Actor goto command', {
-            actor: this.username,
-            targetX: x,
-            targetY: y
-        });
         const target = { position: { x: x, y: y, z: (this.game as any).world.getHeight(x, y) } };
         
         // Remove existing GoTo behaviors
@@ -688,6 +779,12 @@ export default class Actor extends WorldObject {
                 this.behaviors.splice(i, 1);
             }
         }
+        
+        gameLogger.actorGoto({
+            username: this.username,
+            targetX: x,
+            targetY: y
+        });
         
         // Add new GoTo behavior
         this.behaviors.push(new GoTo(this, target));

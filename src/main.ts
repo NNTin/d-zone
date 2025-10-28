@@ -495,11 +495,14 @@ export function initWebsocket(): void {
                 const userList = data.data.users;
                 game.server = requestServer;
                 
-                // Initialize the game components now that they're properly converted to TS
+                // Initialize the game components
                 world = new World(game as any, Math.round(3.3 * Math.sqrt(Object.keys(userList).length)));
                 
-                // Wait for world generation to complete before spawning actors
+                // Wait for world initialization (dependencies loaded) before generating
                 await world.initializationPromise;
+                
+                // Generate the world (can be mocked in E2E tests)
+                world.generateWorld();
                 
                 decorator = new Decorator(game as any, world as any);
                 game.decorator = decorator;

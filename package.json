@@ -34,8 +34,8 @@
     "vitest": "^1.6.0"
   },
   "scripts": {
-    "build:dev": "esbuild src/main.ts --bundle --sourcemap --outfile=dist/static/bundle.js --format=iife --platform=browser --target=es2020 --define:global=window --external:fs --external:path",
-    "build:prod": "esbuild src/main.ts --bundle --minify --outfile=dist/static/bundle.js --format=iife --platform=browser --target=es2020 --define:global=window --external:fs --external:path",
+    "build:dev": "node esbuild.config.mjs",
+    "build:prod": "NODE_ENV=production node esbuild.config.mjs",
     "dev": "concurrently \"npm run watch\" \"npm start\"",
     "prestart": "npm run build:dev",
     "start": "node server.mjs",
@@ -51,7 +51,7 @@
     "test:report": "allure generate --clean && allure open",
     "test:report:generate": "allure generate --clean",
     "type-check": "tsc --noEmit",
-    "watch": "esbuild src/main.ts --bundle --sourcemap --outfile=dist/static/bundle.js --format=iife --platform=browser --target=es2020 --define:global=window --external:fs --external:path --watch"
+    "watch": "node esbuild.config.mjs --watch"
   },
   "repository": {
     "type": "git",

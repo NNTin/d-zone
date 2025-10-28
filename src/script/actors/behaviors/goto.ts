@@ -28,6 +28,13 @@ export default class GoTo {
         this.target.on('movecomplete', this.boundResetAttempt); // Reset adjacent attempts if target moves
         this.boundStartGoTo = this.startGoTo.bind(this);
         
+        gameLogger.info('GoTo behavior created', {
+            actor: this.actor.username,
+            target: this.target.username,
+            attempt: this.attempt,
+            closestGridsLength: geometry.closestGrids?.length || 0
+        });
+        
         if (this.actor.destination) {
             this.actor.once('movecomplete', this.boundStartGoTo);
         } else {
@@ -46,6 +53,17 @@ export default class GoTo {
     
     performMove(): void {
         if (!this.actor || this.actor.presence != 'online' || this.actor.underneath()) return;
+        
+        // Defensive check for closestGrids array bounds
+        if (!geometry.closestGrids || this.attempt >= geometry.closestGrids.length) {
+            gameLogger.error('GoTo: Invalid attempt index for closestGrids', {
+                attempt: this.attempt,
+                closestGridsLength: geometry.closestGrids?.length || 0,
+                actor: this.actor.username
+            });
+            this.actor.stopGoTo(this);
+            return;
+        }
         
         const adjacent = geometry.closestGrids[this.attempt]; // Pick grid next to target
         const targetDistance = geometry.getDistance(this.actor.position, this.target.position);
@@ -91,7 +109,7 @@ export default class GoTo {
             this.actor.once('movecomplete', this.boundStartGoTo);
         } else { // If moving toward target is blocked, find a path
             this.path = Pathfinder.findPath({ start: this.actor.position, end: this.destination });
-            if(this.path[0]) { // If there is a path
+            if(this.path && this.path.length > 0 && this.path[0]) { // If there is a path
                 const pathDelta = {
                     x: this.path[0].x - this.actor.position.x,
                     y: this.path[0].y - this.actor.position.y
@@ -148,4 +166,9 @@ export default class GoTo {
         delete this.actor;
         delete this.target;
     }
+}
+
+// Export to window for E2E testing
+if (typeof window !== 'undefined') {
+    (window as any).GoTo = GoTo;
 }
