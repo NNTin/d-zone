@@ -167,6 +167,10 @@ export default class Actor extends WorldObject {
         // Initialize default behavior
         this.behaviors.push(new Wander(this));
     }
+    updateColor(color: string): void {
+        this.roleColor = color;
+        this.updateSprite();
+    }
 
     updatePresence(presence: string): void {
         this.presence = presence;
