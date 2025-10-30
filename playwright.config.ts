@@ -61,8 +61,24 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
       grep: /@critical|@normal|@active/,
-      grepInvert: /@inactive/,
+      grepInvert: /@inactive|@dback/,
     },
+    
+    // Backend integration tests project - local development only
+    // Requires external d-back server to be running
+    // Enable with: PW_INCLUDE_DBACK=1 npx playwright test
+    ...(!process.env.CI && process.env.PW_INCLUDE_DBACK === '1' ? [{
+      name: 'dback',
+      use: { ...devices['Desktop Chrome'] },
+      // Only run tests tagged with @dback (backend integration tests)
+      grep: /@dback/,
+      // Exclude inactive tests
+      grepInvert: /@inactive/,
+      // Backend integration tests may take longer
+      timeout: 60 * 1000,
+      // Retry once locally for flaky backend integration tests
+      retries: 1,
+    }] : []),
     
     // CI project for sharded execution
     // Only run this project in CI environment
@@ -70,7 +86,8 @@ export default defineConfig({
       name: process.env.ALLURE_SHARD_ID ? `ci-shard-${process.env.ALLURE_SHARD_ID}` : 'ci',
       use: { ...devices['Desktop Chrome'] },
       grep: /@critical|@normal|@long|@active/,
-      grepInvert: /@inactive/,
+      // Ensure CI does NOT run backend integration tests (@dback)
+      grepInvert: /@inactive|@dback/,
     }] : []),
   ],
 
