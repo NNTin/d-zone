@@ -92,15 +92,41 @@ export default defineConfig({
   ],
 
   /* Run your local dev server before starting the tests */
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://127.0.0.1:8080',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000,
-    stdout: 'pipe',
-    stderr: 'pipe',
-    env: {
-      E2E_MODE: 'true'
-    }
-  },
+  webServer: [
+    // D-Zone dev server - always runs for all tests
+    {
+      name: 'D-Zone Dev Server',
+      command: 'npm run dev',
+      url: 'http://127.0.0.1:8080',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120 * 1000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: {
+        E2E_MODE: 'true'
+      }
+    },
+    
+    // D-Back WebSocket server - runs when PW_INCLUDE_DBACK=1
+    // Requires DBACK_VERSION or DBACK_COMMIT environment variable
+    ...(process.env.PW_INCLUDE_DBACK === '1' ? [{
+      name: 'D-Back WebSocket Server',
+      command: (() => {
+        const isWindows = process.platform === 'win32';
+        const venvPython = isWindows 
+          ? '..\\d-back\\.venv\\Scripts\\python.exe'
+          : '../d-back/.venv/bin/python';
+        return `node scripts/setup-dback.mjs && "${venvPython}" -m d_back --port 3000 --host 127.0.0.1`;
+      })(),
+      url: 'http://127.0.0.1:3000',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120 * 1000,
+      stdout: 'pipe' as const,
+      stderr: 'pipe' as const,
+      env: {
+        DBACK_VERSION: process.env.DBACK_VERSION,
+        DBACK_COMMIT: process.env.DBACK_COMMIT,
+      }
+    }] : [])
+  ],
 });
