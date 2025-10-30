@@ -15,10 +15,16 @@ function execCommand(command, options = {}) {
   console.log(`🔧 Executing: ${displayCommand}`);
   
   try {
+    // Extract custom options and build execSync options
+    const { silent, displayCommand: _, ...execOptions } = options;
+    
+    // Set stdio based on silent flag
+    const stdio = silent ? 'pipe' : 'inherit';
+    
     const output = execSync(command, {
       encoding: 'utf8',
-      stdio: options.silent ? 'pipe' : 'inherit',
-      ...options
+      stdio,
+      ...execOptions
     });
     return output;
   } catch (error) {
@@ -227,17 +233,30 @@ function installFromGitCommit(commitHash) {
     }
     
     if (gitStatus.trim().length > 0) {
-      console.error('❌ Git working tree is dirty. Cannot checkout commit.');
-      console.error('   The d-back repository has uncommitted changes:');
-      console.error('');
-      console.error(gitStatus.trim().split('\n').map(line => `   ${line}`).join('\n'));
-      console.error('');
-      console.error('   Please commit or stash your changes before running this script.');
-      console.error(`   cd ${dbackPath} && git status`);
-      process.exit(1);
+      const allowDirty = process.env.DBACK_ALLOW_DIRTY === '1';
+      
+      if (!allowDirty) {
+        console.error('❌ Git working tree is dirty. Cannot checkout commit.');
+        console.error('   The d-back repository has uncommitted changes:');
+        console.error('');
+        console.error(gitStatus.trim().split('\n').map(line => `   ${line}`).join('\n'));
+        console.error('');
+        console.error('   Please commit or stash your changes before running this script.');
+        console.error(`   cd ${dbackPath} && git status`);
+        console.error('');
+        console.error('   To proceed anyway (not recommended): DBACK_ALLOW_DIRTY=1');
+        process.exit(1);
+      } else {
+        console.warn('⚠️  WARNING: Proceeding with dirty working tree (DBACK_ALLOW_DIRTY=1)');
+        console.warn('   The d-back repository has uncommitted changes:');
+        console.warn('');
+        console.warn(gitStatus.trim().split('\n').map(line => `   ${line}`).join('\n'));
+        console.warn('');
+        console.warn('   Checkout may fail or produce unexpected results.');
+      }
+    } else {
+      console.log('✅ Working tree is clean');
     }
-    
-    console.log('✅ Working tree is clean');
     
     // Fetch latest changes from all remotes
     console.log('📡 Fetching latest changes from remotes...');
