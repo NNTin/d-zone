@@ -124,7 +124,12 @@ test.describe('@dback D-Back Server Integration', () => {
     expect(users).toBeDefined();
     expect(typeof users).toBe('object');
     
-    const userArray = Object.values(users);
+    // Get actors from the users instance
+    const actors = await page.evaluate(() => (window as any).game.users.actors);
+    expect(actors).toBeDefined();
+    expect(typeof actors).toBe('object');
+    
+    const userArray = Object.values(actors);
     console.log(`📊 Received ${userArray.length} users from d-back server`);
     
     // Verify users structure

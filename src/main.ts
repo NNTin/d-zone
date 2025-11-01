@@ -317,6 +317,53 @@ function addHelpButton(): void {
     });
 }
 
+/**
+ * Normalizes user data to handle both nested (d-back) and flat (legacy) formats
+ * @param user User object that may have nested or flat structure
+ * @returns Normalized user object with flat structure
+ */
+function normalizeUserData(user: any): any {
+    // Check if the object has a nested user property with id and username fields (d-back format)
+    if (user && user.user && user.user.id && user.user.username) {
+        // Extract data from nested structure
+        const uid = user.user.id;
+        const username = user.user.username;
+        const status = user.status || 'online';
+        
+        // Extract roleColor from roles array if present
+        let roleColor: string | undefined;
+        if (user.roles && Array.isArray(user.roles)) {
+            // Check if roles array contains specific role IDs that map to colors
+            // This is a placeholder for role-to-color mapping logic
+            roleColor = user.roles.length > 0 ? undefined : undefined;
+        }
+        
+        const normalizedUser = { uid, username, status, ...(roleColor && { roleColor }) };
+        
+        gameLogger.debug('User data transformation applied', {
+            originalStructure: 'nested',
+            uid: uid,
+            username: username,
+            status: status
+        });
+        
+        return normalizedUser;
+    }
+    
+    // If flat structure already present (has uid and username at top level)
+    if (user && user.uid && user.username) {
+        gameLogger.debug('User data transformation skipped', {
+            originalStructure: 'flat',
+            uid: user.uid,
+            username: user.username
+        });
+        return { uid: user.uid, username: user.username, status: user.status || 'online', roleColor: user.roleColor };
+    }
+    
+    // Return as-is for backward compatibility
+    return user;
+}
+
 export function initWebsocket(): void {
     // Initialize the game components now that they're properly imported
     let users: Users, world: World | undefined, decorator: Decorator | undefined;
@@ -507,6 +554,7 @@ export function initWebsocket(): void {
                 decorator = new Decorator(game as any, world as any);
                 game.decorator = decorator;
                 users = new Users(game as any, world as any);
+                game.users = users;
                 
                 const params = '?s=' + data.data.request.server;
                 if (window.location.protocol !== 'file:') {
@@ -521,15 +569,32 @@ export function initWebsocket(): void {
                 if (world && world.setMaxListeners) world.setMaxListeners(userCount + 50);
                 if (decorator && decorator.setMaxListeners) decorator.setMaxListeners(userCount + 50);
                 
+                let transformedCount = 0;
+                let processedCount = 0;
+                
                 for (const uid in userList) { 
                     if (!userList.hasOwnProperty(uid)) continue;
                     //if(uid != '86913608335773696') continue;
                     //if(data.data[uid].status != 'online') continue;
-                    if (!userList[uid].username) continue;
-                    if (users) users.addActor(userList[uid]); // Fire and forget async call
+                    
+                    // Normalize user data before processing
+                    const normalizedUser = normalizeUserData(userList[uid]);
+                    if (normalizedUser !== userList[uid]) {
+                        transformedCount++;
+                    }
+                    
+                    if (!normalizedUser.username) continue;
+                    if (users) users.addActor(normalizedUser); // Fire and forget async call
+                    processedCount++;
                     //break;
                 }
                 const actorCount = users ? Object.keys(users.actors).length : 0;
+                gameLogger.debug('User data processing complete', {
+                    totalUsers: userCount,
+                    processedUsers: processedCount,
+                    transformedUsers: transformedCount,
+                    createdActors: actorCount
+                });
                 gameLogger.info('Actors initialized', { 
                     totalUsers: userCount, 
                     createdActors: actorCount,
