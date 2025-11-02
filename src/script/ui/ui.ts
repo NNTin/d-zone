@@ -4,9 +4,9 @@ import { EventEmitter } from 'events';
 import BetterCanvas from '../common/bettercanvas.js';
 import { TextBlotter } from '../common/textblotter.js';
 import Button from './button.js';
-import Panel from './panel.js';
 import Input from './input.js';
 import Label from './label.js';
+import Panel from './panel.js';
 import UIElement from './uielement.js';
 
 interface UIOptions {
@@ -65,21 +65,23 @@ export default class UI extends EventEmitter {
         this.game.on('keydown', this.onKeyDown.bind(this));
         this.game.on('keyup', this.onKeyUp.bind(this));
         this.elements = [];
-        this.x = 0; 
-        this.y = 0;
-        this.w = 1;  // Initialize with default dimensions
-        this.h = 1;  // These will be updated by the first onResize event
-        this.canvas = new BetterCanvas(1, 1);
-        const self = this;
-        this.on('draw', function(canvas: any) { 
-            canvas.drawStatic(self.canvas.canvas); 
-        });
-        this.boundRedraw = this.redraw.bind(this);
-        this.boundOnMouseOnElement = this.onMouseOnElement.bind(this);
-        this.boundOnMouseOffElement = this.onMouseOffElement.bind(this);
-    }
-
-    // TODO: Abstract these different add methods into one
+    this.x = 0; 
+    this.y = 0;
+    this.w = 1;  // Initialize with default dimensions
+    this.h = 1;  // These will be updated by the first onResize event
+    this.canvas = new BetterCanvas(1, 1);
+    const self = this;
+    this.on('draw', function(canvas: any) {
+        // Skip drawing if UI canvas hasn't been properly sized yet
+        if (self.canvas.canvas.width <= 1 || self.canvas.canvas.height <= 1) {
+            return;
+        }
+        canvas.drawStatic(self.canvas.canvas); 
+    });
+    this.boundRedraw = this.redraw.bind(this);
+    this.boundOnMouseOnElement = this.onMouseOnElement.bind(this);
+    this.boundOnMouseOffElement = this.onMouseOffElement.bind(this);
+}    // TODO: Abstract these different add methods into one
     addButton(options: UIOptions): Button {
         if(!options.parent) options.parent = this;
         options.ui = this;

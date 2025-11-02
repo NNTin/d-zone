@@ -36,14 +36,18 @@ function initGame(images: Record<string, HTMLCanvasElement>): void {
     const canvas = new Canvas({ id: 'main', game: game, initialScale: 2, backgroundColor: '#181213' });
     game.renderer.addCanvas(canvas);
     game.bindCanvas(canvas);
-    
+
     // Initialize UI (converted to TypeScript)
     game.ui = new UI(game as any);
-    
+
+    // Ensure UI canvas is properly sized before renderer can draw it
+    game.ui.onResize({
+        width: canvas.width,
+        height: canvas.height
+    });
+
     //game.showGrid = true;
-    //game.timeRenders = true;
-    
-    // Initialize Discord OAuth
+    //game.timeRenders = true;    // Initialize Discord OAuth
     initDiscordAuth();
     
     // Add help button immediately after UI initialization
