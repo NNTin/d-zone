@@ -61,8 +61,24 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
       grep: /@critical|@normal|@active/,
-      grepInvert: /@inactive/,
+      grepInvert: /@inactive|@dback/,
     },
+    
+    // Backend integration tests project - local development only
+    // Requires external d-back server to be running
+    // Enable with: PW_INCLUDE_DBACK=1 npx playwright test
+    ...(!process.env.CI && process.env.PW_INCLUDE_DBACK === '1' ? [{
+      name: 'dback',
+      use: { ...devices['Desktop Chrome'] },
+      // Only run tests tagged with @dback (backend integration tests)
+      grep: /@dback/,
+      // Exclude inactive tests
+      grepInvert: /@inactive/,
+      // Backend integration tests may take longer
+      timeout: 60 * 1000,
+      // Retry once locally for flaky backend integration tests
+      retries: 1,
+    }] : []),
     
     // CI project for sharded execution
     // Only run this project in CI environment
@@ -70,20 +86,47 @@ export default defineConfig({
       name: process.env.ALLURE_SHARD_ID ? `ci-shard-${process.env.ALLURE_SHARD_ID}` : 'ci',
       use: { ...devices['Desktop Chrome'] },
       grep: /@critical|@normal|@long|@active/,
-      grepInvert: /@inactive/,
+      // Ensure CI does NOT run backend integration tests (@dback)
+      grepInvert: /@inactive|@dback/,
     }] : []),
   ],
 
   /* Run your local dev server before starting the tests */
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://127.0.0.1:8080',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000,
-    stdout: 'pipe',
-    stderr: 'pipe',
-    env: {
-      E2E_MODE: 'true'
-    }
-  },
+  webServer: [
+    // D-Zone dev server - always runs for all tests
+    {
+      name: 'D-Zone Dev Server',
+      command: 'npm run dev',
+      url: 'http://127.0.0.1:8080',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120 * 1000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: {
+        E2E_MODE: 'true'
+      }
+    },
+    
+    // D-Back WebSocket server - runs when PW_INCLUDE_DBACK=1
+    // Requires DBACK_VERSION or DBACK_COMMIT environment variable
+    ...(process.env.PW_INCLUDE_DBACK === '1' ? [{
+      name: 'D-Back WebSocket Server',
+      command: (() => {
+        const isWindows = process.platform === 'win32';
+        const venvPython = isWindows 
+          ? '..\\d-back\\.venv\\Scripts\\python.exe'
+          : '../d-back/.venv/bin/python';
+        return `node scripts/setup-dback.mjs && "${venvPython}" -m d_back --port 3000 --host 127.0.0.1`;
+      })(),
+      url: 'http://127.0.0.1:3000',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120 * 1000,
+      stdout: 'pipe' as const,
+      stderr: 'pipe' as const,
+      env: {
+        DBACK_VERSION: process.env.DBACK_VERSION,
+        DBACK_COMMIT: process.env.DBACK_COMMIT,
+      }
+    }] : [])
+  ],
 });

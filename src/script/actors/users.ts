@@ -32,6 +32,7 @@ interface Actor {
     position: { x: number; y: number; z: number };
     addToGame(game: any): void;
     updatePresence(status: string): void;
+    updateColor(color: string): void;
     startTalking(message: string, channel: string, callback: () => void): void;
     remove(): void;
 }
@@ -115,6 +116,9 @@ export default class Users extends EventEmitter {
                 this.removeActor(actor);
             } else {
                 actor.updatePresence(data.status);
+                if (data.roleColor) {
+                    actor.updateColor(data.roleColor);
+                }
             }
         } else {
             await this.addActor(data);
