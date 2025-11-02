@@ -4,12 +4,10 @@ import { EventEmitter } from 'events';
 import { util } from '../common/util.js';
 
 interface User {
-    user: {
-        username: string;
-        id: string;
-        discriminator: number;
-        avatar: string;
-    };
+    uid: string;
+    username: string;
+    discriminator: number;
+    avatar: string;
     roles: string[];
     mute: boolean;
     joined_at: string;
@@ -39,7 +37,7 @@ export default class TestSocket extends EventEmitter {
         this.users = {};
         for(let i = 0; i < this.userCount; i++) {
             const user = this.newUser();
-            this.users[user.user.id] = user;
+            this.users[user.uid] = user;
         }
         const self = this;
         setTimeout(function() { 
@@ -63,7 +61,7 @@ export default class TestSocket extends EventEmitter {
                     uid: uid, status: status
                 });
             } else {
-                uid = self.randomUser({status:'online'}).user.id;
+                uid = self.randomUser({status:'online'}).uid;
                 self.sendData('message', {
                     uid: uid, message: sentenceBuilder(), channel: '10000000000'
                 });
@@ -93,18 +91,17 @@ export default class TestSocket extends EventEmitter {
         }
         const isMute = Math.random() > 0.9;
         const user: User = {
-            user: { 
-                username: name, 
-                id: uid, 
-                discriminator: util.randomIntRange(1000, 9999), 
-                avatar: avatar 
-            },
+            uid: uid,
+            username: name,
+            discriminator: util.randomIntRange(1000, 9999),
+            avatar: avatar,
             roles: Math.random() > 0.5 ? ['86919909468049408'] : [],
             mute: isMute,
             joined_at: '2015-0' + util.randomIntRange(1, 9) + '-' + util.randomIntRange(10, 28) + 'T0' +
                 util.randomIntRange(1, 9) + ':' + util.randomIntRange(10, 59) + '.000000+00:00',
             deaf: isMute,
-            game_id: null
+            game_id: null,
+            status: 'online' // Default status to prevent undefined
         };
         if(Math.random() > 0.2) user.status = util.pickInArray(['online','online','online','idle','offline']);
         if(Math.random() > 0.9) user.game_id = util.randomIntRange(0, 585);

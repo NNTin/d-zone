@@ -1,9 +1,9 @@
 'use strict';
 
-import util from '../common/util.js';
 import { EventEmitter } from 'events';
-import BetterCanvas from '../common/bettercanvas.js';
 import { gameLogger } from '../../gameLogger.js';
+import BetterCanvas from '../common/bettercanvas.js';
+import util from '../common/util.js';
 
 interface CanvasOptions {
     id: string;
@@ -207,6 +207,14 @@ export class Canvas extends EventEmitter {
     }
 
     drawStatic(staticCanvas: HTMLCanvasElement): void {
+        // Validate canvas dimensions before attempting to draw
+        if (staticCanvas.width <= 0 || staticCanvas.height <= 0) {
+            gameLogger.debug('Canvas drawStatic: Skipping draw - invalid canvas dimensions', {
+                width: staticCanvas.width,
+                height: staticCanvas.height
+            });
+            return;
+        }
         this.context.drawImage(staticCanvas, 0, 0);
     }
 
