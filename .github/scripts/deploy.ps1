@@ -425,7 +425,8 @@ function New-VersionsJson {
         }
         
         # Convert to JSON and write to build directory
-        $jsonContent = $VersionsList | ConvertTo-Json -Compress
+        # Force array serialization even for single elements by wrapping in @()
+        $jsonContent = ConvertTo-Json -InputObject @($VersionsList) -Compress
         
         # Write to file with UTF8 encoding without BOM
         $utf8NoBom = New-Object System.Text.UTF8Encoding $false
