@@ -1,0 +1,49 @@
+{
+  "name": "D-Zone Node.js Dev Environment",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "workspaceFolder": "/workspace/app",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.vscode-typescript-next",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss",
+        "ms-playwright.playwright",
+        "qwtel.sqlite-viewer",
+        "ms-vscode.vscode-json",
+        "ms-vscode.test-adapter-converter",
+        "hbenl.vscode-test-explorer",
+        "formulahendry.auto-rename-tag",
+        "christian-kohler.path-intellisense",
+        "ms-vscode.vscode-eslint"
+      ]
+    }
+  },
+
+  "forwardPorts": [8080, 3000],
+
+  "postCreateCommand": "cd /workspace/app && npm install",
+
+  "remoteUser": "node",
+
+  "mounts": [
+    // ✅ Mount entire project (including package.json, etc.)
+    "source=${localWorkspaceFolder},target=/workspace/app,type=bind,consistency=cached",
+    
+    // ✅ Mount node_modules as a separate volume, and prevent host version from leaking in
+    "source=dzone_node_modules,target=/workspace/app/node_modules,type=volume,volume-opt=o=nocopy"
+  ],
+
+  "containerEnv": {
+    "NODE_ENV": "development"
+  },
+
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  }
+}
