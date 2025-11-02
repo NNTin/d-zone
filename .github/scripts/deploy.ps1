@@ -367,6 +367,79 @@ function New-RootIndexHtml {
     }
 }
 
+function New-VersionsJson {
+    param([string]$Version)
+    
+    Write-Host "Creating versions.json..." -ForegroundColor Cyan
+    
+    try {
+        $VersionsJsonPath = Join-Path $BuildDir "versions.json"
+        $VersionsList = @()
+        
+        # Fetch gh-pages branch without checking it out
+        Write-Host "  Fetching gh-pages branch..." -ForegroundColor Gray
+        try {
+            git fetch origin gh-pages:gh-pages 2>$null
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "  ⚠ gh-pages branch not found (first deployment?)" -ForegroundColor Yellow
+            }
+        }
+        catch {
+            Write-Host "  ⚠ Could not fetch gh-pages branch (first deployment?)" -ForegroundColor Yellow
+        }
+        
+        # Try to get existing versions.json from gh-pages branch
+        Write-Host "  Checking for existing versions.json..." -ForegroundColor Gray
+        try {
+            $existingJsonContent = git show gh-pages:versions.json 2>$null
+            if ($LASTEXITCODE -eq 0 -and $existingJsonContent) {
+                $VersionsList = $existingJsonContent | ConvertFrom-Json
+                Write-Host "  ✓ Found existing versions.json with $($VersionsList.Count) version(s)" -ForegroundColor Green
+            }
+            else {
+                Write-Host "  ℹ No existing versions.json found, starting fresh" -ForegroundColor Gray
+            }
+        }
+        catch {
+            Write-Host "  ℹ No existing versions.json found, starting fresh" -ForegroundColor Gray
+        }
+        
+        # Ensure we have an array
+        if ($VersionsList -isnot [System.Array]) {
+            if ($null -eq $VersionsList) {
+                $VersionsList = @()
+            }
+            else {
+                $VersionsList = @($VersionsList)
+            }
+        }
+        
+        # Check if current version already exists
+        if ($VersionsList -contains $Version) {
+            Write-Host "  ℹ Version '$Version' already exists in versions list (re-deployment)" -ForegroundColor Gray
+        }
+        else {
+            # Append new version to the end (chronological order)
+            $VersionsList += $Version
+            Write-Host "  ✓ Added version '$Version' to versions list" -ForegroundColor Green
+        }
+        
+        # Convert to JSON and write to build directory
+        $jsonContent = $VersionsList | ConvertTo-Json -Compress
+        
+        # Write to file with UTF8 encoding without BOM
+        $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+        [System.IO.File]::WriteAllText($VersionsJsonPath, $jsonContent, $utf8NoBom)
+        
+        $fileSize = (Get-Item $VersionsJsonPath).Length
+        Write-Host "✓ Created versions.json ($fileSize bytes) with $($VersionsList.Count) version(s)" -ForegroundColor Green
+    }
+    catch {
+        Write-Error "Failed to create versions.json: $_"
+        exit 1
+    }
+}
+
 function Write-BuildSummary {
     param([string]$Version)
     
@@ -386,6 +459,23 @@ function Write-BuildSummary {
     if (Test-Path $IndexHtmlPath) {
         $IndexSize = (Get-Item $IndexHtmlPath).Length
         Write-Host "Root index.html size: $IndexSize bytes" -ForegroundColor White
+    }
+    
+    # Check and display versions.json information
+    $VersionsJsonPath = Join-Path $BuildDir "versions.json"
+    if (Test-Path $VersionsJsonPath) {
+        try {
+            $versionsContent = Get-Content $VersionsJsonPath -Raw | ConvertFrom-Json
+            $versionCount = if ($versionsContent -is [System.Array]) { $versionsContent.Count } else { 1 }
+            Write-Host "Versions in versions.json: $versionCount" -ForegroundColor White
+            Write-Host "Version list: $($versionsContent -join ', ')" -ForegroundColor White
+        }
+        catch {
+            Write-Host "Versions.json exists but could not be parsed" -ForegroundColor Yellow
+        }
+    }
+    else {
+        Write-Host "versions.json: Not found" -ForegroundColor Yellow
     }
 }
 
@@ -432,6 +522,9 @@ try {
     
     # Create root index.html with hash-based routing
     New-RootIndexHtml -Version $Version
+    
+    # Create versions.json with all deployed versions
+    New-VersionsJson -Version $Version
     
     # Display build summary
     Write-BuildSummary -Version $Version
