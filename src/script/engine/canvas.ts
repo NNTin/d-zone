@@ -184,6 +184,17 @@ export class Canvas extends EventEmitter {
     onResize(): void {
         this.width = this.canvas.canvas.width = Math.ceil(window.innerWidth / this.scale);
         this.height = this.canvas.canvas.height = Math.ceil(window.innerHeight / this.scale);
+        
+        // Validate dimensions are positive and valid
+        if (this.width <= 0 || isNaN(this.width)) {
+            console.warn('Canvas width invalid, setting to minimum safe value:', this.width);
+            this.width = this.canvas.canvas.width = 1;
+        }
+        if (this.height <= 0 || isNaN(this.height)) {
+            console.warn('Canvas height invalid, setting to minimum safe value:', this.height);
+            this.height = this.canvas.canvas.height = 1;
+        }
+        
         this.halfWidth = Math.round(this.width / 2);
         this.halfHeight = Math.round(this.height / 2);
         this.emit('resize', { scale: this.scale, width: this.width, height: this.height });

@@ -46,6 +46,12 @@ function initGame(images: Record<string, HTMLCanvasElement>): void {
         height: canvas.height
     });
 
+    // Ensure main canvas dimensions are set
+    canvas.onResize();
+
+    // Start the renderer draw loop now that all components are ready
+    game.renderer.startDrawLoop();
+
     //game.showGrid = true;
     //game.timeRenders = true;    // Initialize Discord OAuth
     initDiscordAuth();
@@ -54,7 +60,7 @@ function initGame(images: Record<string, HTMLCanvasElement>): void {
     addHelpButton();
     
     // Ensure UI is properly sized after adding the help button
-    game.renderer.canvases[0].onResize();
+    canvas.onResize();
     
     initWebsocket();
 

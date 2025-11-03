@@ -1,8 +1,8 @@
 'use strict';
 
 import { EventEmitter } from 'events';
-import { ColorUtil } from '../common/colorutil.js';
 import { gameLogger } from '../../gameLogger.js';
+import { ColorUtil } from '../common/colorutil.js';
 
 interface RendererOptions {
     game: any;
@@ -26,6 +26,9 @@ export class Renderer extends EventEmitter {
     frames: number = 0;
     canvases?: any[];
     bgCanvas?: any;
+    ready: boolean = false;
+    private _started: boolean = false;
+    private _rafId?: number;
 
     constructor(options: RendererOptions) {
         super();
@@ -36,8 +39,29 @@ export class Renderer extends EventEmitter {
         this.game.on('render', function () {
             self.updateDrawn = false;
         });
+        
+        // Don't start draw loop immediately - wait for startDrawLoop() call
+    }
 
+    startDrawLoop(): void {
+        if (this._started) {
+            return;
+        }
+        
+        this._started = true;
+        this.ready = true;
+        const self = this;
         const draw = () => {
+            if (!self.ready) {
+                requestAnimationFrame(draw);
+                return;
+            }
+            
+            if (!self.canvases || self.canvases.length === 0) {
+                requestAnimationFrame(draw);
+                return;
+            }
+            
             if (self.updateDrawn === false) {
                 if (self.canvases) {
                     const timeThis = self.game.timeRenders && (self.game.ticks & 511) === 0;
@@ -83,7 +107,7 @@ export class Renderer extends EventEmitter {
             }
             requestAnimationFrame(draw);
         };
-        requestAnimationFrame(draw);
+        this._rafId = requestAnimationFrame(draw);
     }
 
     addCanvas(canvas: any): void {
