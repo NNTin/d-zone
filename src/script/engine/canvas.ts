@@ -235,6 +235,15 @@ export class Canvas extends EventEmitter {
             return;
         }
         
+        if (bgCanvas.image.width <= 0 || bgCanvas.image.height <= 0) {
+            gameLogger.warn('Canvas drawBG: Invalid background canvas dimensions', {
+                width: bgCanvas.image.width,
+                height: bgCanvas.image.height,
+                message: 'This is likely a world generation issue'
+            });
+            return;
+        }
+        
         const x = bgCanvas.x + this.halfWidth + this.panning.panned.x;
         const y = bgCanvas.y + this.halfHeight + this.panning.panned.y;
 
@@ -320,6 +329,16 @@ export class Canvas extends EventEmitter {
             }
         } else {
             image = sprite.image;
+        }
+        
+        if (image.width <= 0 || image.height <= 0) {
+            gameLogger.warn('Canvas drawEntity: Invalid entity image dimensions', {
+                width: image.width,
+                height: image.height,
+                spriteType: sprite.constructor?.name,
+                imageIdentifier: sprite.image
+            });
+            return;
         }
         
         const highlight = sprite === this.game.mouseOver?.sprite;

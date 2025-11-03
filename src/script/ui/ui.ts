@@ -73,7 +73,7 @@ export default class UI extends EventEmitter {
     const self = this;
     this.on('draw', function(canvas: any) {
         // Skip drawing if UI canvas hasn't been properly sized yet
-        if (self.canvas.canvas.width <= 1 || self.canvas.canvas.height <= 1) {
+        if (self.canvas.canvas.width <= 0 || self.canvas.canvas.height <= 0) {
             return;
         }
         canvas.drawStatic(self.canvas.canvas); 

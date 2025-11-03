@@ -204,6 +204,14 @@ export default class World extends EventEmitter {
             staticMapCount: this.staticMap.length 
         });
         
+        if (this.staticMap.length === 0) {
+            gameLogger.error('World: Cannot create background canvas - no static tiles', {
+                staticMapLength: 0,
+                message: 'Background canvas creation skipped due to empty world'
+            });
+            return;
+        }
+        
         let lowestScreenX = 0, lowestScreenY = 0, highestScreenX = 0, highestScreenY = 0;
         
         for(let i = 0; i < this.staticMap.length; i++) {
@@ -221,10 +229,31 @@ export default class World extends EventEmitter {
             lowestScreenX, lowestScreenY, highestScreenX, highestScreenY
         });
         
-        const bgCanvas = new BetterCanvas(
-            (highestScreenX - lowestScreenX) + 32 + 1,
-            (highestScreenY - lowestScreenY) + 32 + 9
-        );
+        const canvasWidth = (highestScreenX - lowestScreenX) + 32 + 1;
+        const canvasHeight = (highestScreenY - lowestScreenY) + 32 + 9;
+        
+        if (canvasWidth <= 0 || canvasHeight <= 0 || (highestScreenX - lowestScreenX) === 0 && (highestScreenY - lowestScreenY) === 0) {
+            gameLogger.error('World: Cannot create background canvas - invalid dimensions', {
+                calculatedWidth: canvasWidth,
+                calculatedHeight: canvasHeight,
+                screenBounds: { lowestScreenX, lowestScreenY, highestScreenX, highestScreenY },
+                staticMapLength: this.staticMap.length,
+                message: 'This likely means all tiles have the same screen position or bounds are invalid'
+            });
+            return;
+        }
+        
+        const bgCanvas = new BetterCanvas(canvasWidth, canvasHeight);
+        
+        if (!bgCanvas || !bgCanvas.canvas || bgCanvas.canvas.width <= 0 || bgCanvas.canvas.height <= 0) {
+            gameLogger.error('World: BetterCanvas creation failed', {
+                requestedDimensions: { width: canvasWidth, height: canvasHeight },
+                bgCanvasExists: !!bgCanvas,
+                actualDimensions: bgCanvas ? { width: bgCanvas.canvas?.width, height: bgCanvas.canvas?.height } : null,
+                message: 'BetterCanvas creation failed'
+            });
+            return;
+        }
         
         let tilesDrawn = 0;
         for(let j = 0; j < this.staticMap.length; j++) {
@@ -292,9 +321,26 @@ export default class World extends EventEmitter {
             }
         }
         
+        if (tilesDrawn === 0 || bgCanvas.canvas.width <= 0 || bgCanvas.canvas.height <= 0) {
+            gameLogger.warn('World: Background canvas creation failed - no tiles drawn or invalid dimensions', {
+                tilesDrawn: tilesDrawn,
+                canvasDimensions: { width: bgCanvas.canvas.width, height: bgCanvas.canvas.height },
+                staticMapLength: this.staticMap.length,
+                message: 'Background canvas will not be set due to no tiles being drawn or invalid dimensions'
+            });
+            return;
+        }
+        
         this.game.renderer.bgCanvas = {
             x: lowestScreenX, y: lowestScreenY, image: bgCanvas.canvas
         };
+        
+        gameLogger.debug('World: Background canvas created successfully', {
+            canvasDimensions: { width: bgCanvas.canvas.width, height: bgCanvas.canvas.height },
+            tilesDrawn: tilesDrawn,
+            screenBoundsOffset: { x: lowestScreenX, y: lowestScreenY },
+            staticMapLength: this.staticMap.length
+        });
     }
 
     // Debounced refresh to avoid double-drawing during move (remove + add)
